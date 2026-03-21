@@ -126,27 +126,43 @@ async function actionPlanAgent(eligibilityResults: string, intakeSummary: any) {
             model: "gemini-3-flash-preview",
             contents: `
                 You are the Action Plan Agent. Write a personalized plan with this EXACT structure:
-                MIACOMPASS HUB — YOUR RESOURCE PLAN
+                # MIACOMPASS HUB — YOUR RESOURCE PLAN
                 [warm opening line]
-                [GET HELP NOW if CRITICAL — 211 + most urgent program]
-                FEDERAL PROGRAMS [2-3 programs]
-                FLORIDA PROGRAMS [2-3 programs]
-                MIAMI-DADE PROGRAMS [3-4 programs]
-                NEAR YOU — [neighborhood] [if applicable]
-                EDUCATION & TRAINING [always 1-2 options]
-                
-                YOUR NEXT STEPS IN ORDER:
-                1. [Today's action]
-                2. [This week's action]
-                3. [This week's action]
-                4. [This month's action]
-                
-                (If in Spanish, use: SUS PRÓXIMOS PASOS EN ORDEN:)
-                
-                GETTING THERE [addresses + "use Transit Hub tab"]
+
+                ### 🚨 GET HELP NOW (If Critical)
+                [211 + most urgent program]
+
+                ### 🏛️ FEDERAL PROGRAMS
+                * **[Program Name]**: [Brief Description]. [Link/Phone]
+                * **[Program Name]**: [Brief Description]. [Link/Phone]
+
+                ### 🌴 FLORIDA PROGRAMS
+                * **[Program Name]**: [Brief Description]. [Link/Phone]
+                * **[Program Name]**: [Brief Description]. [Link/Phone]
+
+                ### 🏙️ MIAMI-DADE PROGRAMS
+                * **[Program Name]**: [Brief Description]. [Link/Phone]
+                * **[Program Name]**: [Brief Description]. [Link/Phone]
+
+                ### 📍 NEAR YOU — [neighborhood]
+                * **[Program Name]**: [Brief Description]. [Link/Phone]
+
+                ### 🎓 EDUCATION & TRAINING
+                * **[Program Name]**: [Brief Description]. [Link/Phone]
+
+                ### 📋 YOUR NEXT STEPS IN ORDER
+                1. **Today**: [Action]
+                2. **This Week**: [Action]
+                3. **This Week**: [Action]
+                4. **This Month**: [Action]
+
+                (If in Spanish, use: ### 📋 SUS PRÓXIMOS PASOS EN ORDEN)
+
+                ### 🚗 GETTING THERE
+                [addresses + "use Transit Hub tab"]
                 Questions? Ask me — I remember your full profile.
                 
-                CRITICAL: The "YOUR NEXT STEPS IN ORDER" section MUST be at the end of the plan, just before "GETTING THERE". It MUST use a numbered list (1., 2., 3., 4.).
+                CRITICAL: The "YOUR NEXT STEPS IN ORDER" section MUST be clearly demarcated with the header provided. It MUST use a numbered list (1., 2., 3., 4.).
                 
                 Rules:
                 - Max 700 words.
@@ -219,14 +235,136 @@ export async function runMIACompassAgent(type: 'survey' | 'chat' | 'jobs', data:
     });
 
     if (type === 'survey') {
-        const intake = await intakeAgent(data);
-        const research = await researchAgent(intake);
-        const eligibility = await eligibilityAgent(research || "", intake);
-        const plan = await actionPlanAgent(eligibility || "", intake);
-        return plan;
+        console.log("Starting consolidated Survey Orchestrator...");
+        try {
+            const response = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: `
+                    You are the MIACompass Hub Orchestrator. Your goal is to generate a complete, personalized Resource Plan for a Miami-Dade resident in ONE step.
+                    
+                    USER PROFILE: ${JSON.stringify(data)}
+                    
+                    KNOWLEDGE BASE (MIAMI-DADE & FLORIDA):
+                    FEDERAL: SNAP (dcf.state.fl.us), WIC (myflfamilies.com/wic), HUD Section 8 (miamidade.gov/housing), Medicaid (access.florida.gov), Medicare (medicare.gov), ACA Marketplace (healthcare.gov), CHIP (kidsandmedicaid.org), SSDI/SSI (ssa.gov), VA Benefits (va.gov), GI Bill (va.gov/education), Head Start
+                    FLORIDA: Florida SNAP/TANF (access.florida.gov), Reemployment Assistance (floridajobs.org), Florida Medicaid (myfloridahealthcare.com), Florida KidCare (floridakidcare.org), Florida Housing Finance Corp (floridahousing.org), SHIP Program (miamidade.gov/housing), Bright Futures Scholarship (floridastudentfinancialaidsg.org), FSAG grant, CareerSource Florida (careersourceflorida.com), VPK (vpkhelp.com), School Readiness (myfamilies.com/childcare)
+                    MIAMI-DADE HOUSING: ERAP (housingportalmdc.com), Public Housing (miamidade.gov/housing), Camillus House (camillus.org), Homeless Trust (211), Catholic Charities (305-754-2444)
+                    MIAMI-DADE FOOD: Daily Bread (dailybreadmiami.org), Feeding South Florida (feedingsouthflorida.org), LHANC (305-644-2010), Senior Meals (miamidade.gov/elderly)
+                    MIAMI-DADE HEALTH: Jackson Health Charity Care (jacksonhealth.org), Jessie Trice FQHC (305-637-4300), Borinquen Medical Centers (305-576-6611), Mental Health (211), Ryan White (305-375-5671)
+                    MIAMI-DADE UTILITIES: LIHEAP (miamidade.gov/csd), FPL Care To Share (fpl.com/care), Water hardship (305-665-7477)
+                    MIAMI-DADE LEGAL: Legal Aid (legalaidmiamidade.org), Americans for Immigrant Justice (aijustice.org), Catholic Legal Services (305-754-2444)
+                    MIAMI-DADE CHILDCARE: Head Start (communityactionagency.com), School Readiness Coalition (mdsrc.org)
+                    MIAMI-DADE VETERANS: Miami VA Medical Center (305-575-7000), Miami Vet Center (305-718-3400)
+                    MIAMI-DADE TRANSPORT: MDT bus/rail (miamidade.gov/transit), Free seniors 65+, Reduced disability, Medicaid transport (1-855-832-6740)
+                    EDUCATION MIAMI-DADE: MDC Florida College Promise (mdc.edu), MDC Continuing Ed (mdc.edu/ce), FIU financial aid (finaid.fiu.edu), CareerSource South Florida (careersourcesfl.com), Robert Morgan Educational Center (robertmorganed.com), Free GED/Adult Ed (dadeschools.net/adults), Free ESOL English classes, Bright Futures, MDC EASE Grant
+                    
+                    NEIGHBORHOODS:
+                    Hialeah: Housing Authority (305-556-3500), CareerSource Hialeah (305-364-3060)
+                    Miami Beach: Housing Authority (305-532-6401), Mount Sinai charity care (305-674-2121)
+                    Homestead: Armor Health FQHC (305-247-4956), CareerSource South Dade (305-242-1500)
+                    North Miami: Social Services (305-895-9878)
+                    Little Havana: LHANC (305-644-2010), Catholic Charities (305-754-2444)
+                    Little Haiti: Sant La (305-756-8080)
+                    Overtown/Liberty City: Overtown Youth Center (305-375-6990), CAA (305-751-8306)
+                    Coral Gables: Senior Center (305-460-5600)
+                    
+                    YOUR TASK:
+                    1. Analyze the user's profile (Language, Urgency, Special Flags like veteran/senior).
+                    2. Research matching programs from the Knowledge Base. Use Google Search ONLY if you need to find a very specific neighborhood program not listed.
+                    3. Filter for eligibility (age, income, family status).
+                    4. Write a personalized plan with this EXACT structure:
+                    
+                    # MIACOMPASS HUB — YOUR RESOURCE PLAN
+                    [warm opening line]
+
+                    ### 🚨 GET HELP NOW (If Critical)
+                    [211 + most urgent program]
+
+                    ### 🏛️ FEDERAL PROGRAMS
+                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+
+                    ### 🌴 FLORIDA PROGRAMS
+                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+
+                    ### 🏙️ MIAMI-DADE PROGRAMS
+                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+
+                    ### 📍 NEAR YOU — [neighborhood]
+                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+
+                    ### 🎓 EDUCATION & TRAINING
+                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+
+                    ### 📋 YOUR NEXT STEPS IN ORDER
+                    1. **Today**: [Action]
+                    2. **This Week**: [Action]
+                    3. **This Week**: [Action]
+                    4. **This Month**: [Action]
+
+                    (If in Spanish, use: ### 📋 SUS PRÓXIMOS PASOS EN ORDEN)
+
+                    ### 🚗 GETTING THERE
+                    [addresses + "use Transit Hub tab"]
+
+                    ---
+                    Questions? Ask me — I remember your full profile.
+                    
+                    RULES:
+                    - Max 700 words.
+                    - If user preferred Spanish (language: 'Spanish' in profile), respond entirely in Spanish.
+                    - Use Markdown for formatting (### for headers, * for lists).
+                    - Be concise but helpful.
+                `,
+                config: {
+                    tools: [{ googleSearch: {} }]
+                }
+            });
+            console.log("Survey Orchestrator finished.");
+            return response.text;
+        } catch (error) {
+            console.error("Survey Orchestrator failed:", error);
+            return "Error generating plan. Please try again.";
+        }
     } else if (type === 'jobs') {
-        const intake = await intakeAgent(data);
-        return await jobsAgent(intake);
+        console.log("Starting consolidated Jobs Agent...");
+        try {
+            const response = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: `
+                    You are the Jobs Agent for MIACompass Hub. Find real current Miami-Dade job listings matching the user profile.
+                    
+                    USER PROFILE: ${JSON.stringify(data)}
+                    
+                    Output a JSON array of job objects. Each object MUST have:
+                    - title: The job title
+                    - company: The company name
+                    - location: Neighborhood or city in Miami-Dade
+                    - link: URL to apply or more info (if available, otherwise null)
+                    - category: Government, Healthcare, Trades, Tech, Hospitality, Logistics, Education, or Retail
+                    - datePosted: ISO 8601 date string (e.g., "2026-03-21")
+                    - description: A brief 2-3 sentence overview of the role
+                    - requirements: A short list of key qualifications or skills needed
+                    
+                    Always include these 3 mandatory entries in the array (use current date for datePosted):
+                    1. { "title": "Job Training & Placement", "company": "CareerSource South Florida", "location": "Multiple Locations", "link": "https://careersourcesfl.com", "category": "Logistics", "datePosted": "2026-03-21", "description": "Access free job training, career coaching, and placement services across Miami-Dade.", "requirements": "Miami-Dade resident, seeking employment or career advancement." }
+                    2. { "title": "County Government Careers", "company": "Miami-Dade County", "location": "Miami, FL", "link": "https://miamidade.gov/jobs", "category": "Government", "datePosted": "2026-03-21", "description": "Explore diverse career opportunities within the Miami-Dade County government departments.", "requirements": "Varies by position; typically requires background check and residency." }
+                    3. { "title": "State Employment", "company": "State of Florida", "location": "Florida", "link": "https://jobs.myflorida.com", "category": "Government", "datePosted": "2026-03-21", "description": "Find state-level employment opportunities in various sectors across Florida.", "requirements": "Varies by position; must meet state eligibility requirements." }
+                    
+                    Find 5-7 additional REAL jobs in Miami-Dade using Google Search.
+                `,
+                config: {
+                    tools: [{ googleSearch: {} }],
+                    responseMimeType: "application/json"
+                }
+            });
+            console.log("Jobs Agent finished.");
+            return response.text || "[]";
+        } catch (error) {
+            console.error("Jobs Agent failed:", error);
+            return "[]";
+        }
     } else {
         // Chat follow-up
         const response = await chat.sendMessage({ message: data.message });

@@ -22,14 +22,22 @@ export const signInWithGoogle = async () => {
     const userSnap = await getDoc(userRef);
     
     if (!userSnap.exists()) {
-      await setDoc(userRef, {
-        uid: user.uid,
-        displayName: user.displayName,
-        email: user.email,
-        photoURL: user.photoURL,
-        role: 'user',
-        createdAt: serverTimestamp()
-      });
+      try {
+        await setDoc(userRef, {
+          uid: user.uid,
+          displayName: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+          role: 'user',
+          createdAt: serverTimestamp()
+        });
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('resource-exhausted')) {
+          console.warn("Firestore write quota exceeded. User profile not created in cloud.");
+        } else {
+          throw err;
+        }
+      }
     }
     
     return user;

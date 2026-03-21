@@ -150,11 +150,13 @@ const translations = {
     criticalDesc: "I need help immediately (within 24 hours)",
     highDesc: "I need help soon (within a few days)",
     normalDesc: "I am planning for the future",
-    loadingTitle: "Navigating your resources...",
+    loadingTitle: "MIACompa is working...",
     loadingStep1: "Analyzing your profile",
-    loadingStep2: "Searching verified programs",
+    loadingStep2: "Searching local programs",
     loadingStep3: "Checking eligibility",
-    loadingStep4: "Building your action plan",
+    loadingStep4: "Ranking by impact",
+    loadingStep5: "Personalizing your plan",
+    loadingStep6: "Finalizing details",
     landingTitle: "MIACompass Hub",
     landingSubtitle: "Miami has resources for you. Let's find them together.",
     signInGoogle: "Sign in with Google",
@@ -346,11 +348,13 @@ const translations = {
     criticalDesc: "Necesito ayuda de inmediato (dentro de 24 horas)",
     highDesc: "Necesito ayuda pronto (dentro de unos días)",
     normalDesc: "Estoy planeando para el futuro",
-    loadingTitle: "Navegando por tus recursos...",
+    loadingTitle: "MIACompa está trabajando...",
     loadingStep1: "Analizando tu perfil",
-    loadingStep2: "Buscando programas verificados",
-    loadingStep3: "Comprobando elegibilidad",
-    loadingStep4: "Construyendo tu plan de acción",
+    loadingStep2: "Buscando programas locales",
+    loadingStep3: "Verificando elegibilidad",
+    loadingStep4: "Clasificando por impacto",
+    loadingStep5: "Personalizando tu plan",
+    loadingStep6: "Finalizando detalles",
     landingTitle: "Centro MIACompass",
     landingSubtitle: "Miami tiene recursos para ti. Encontrémoslos juntos.",
     signInGoogle: "Iniciar sesión con Google",
@@ -730,7 +734,11 @@ export default function App() {
             searchHistory: arrayUnion(historyItem)
           }, { merge: true });
         } catch (err) {
-          handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+          if (err instanceof Error && err.message.includes('resource-exhausted')) {
+            console.warn("Firestore write quota exceeded. Plan saved locally.");
+          } else {
+            handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+          }
         }
       }
       
@@ -1302,13 +1310,15 @@ function LoadingScreen({ language }: { language: string }) {
     t.loadingStep1,
     t.loadingStep2,
     t.loadingStep3,
-    t.loadingStep4
+    t.loadingStep4,
+    t.loadingStep5,
+    t.loadingStep6
   ];
 
   useEffect(() => {
     const interval = setInterval(() => {
       setStep(prev => (prev < steps.length ? prev + 1 : prev));
-    }, 1500);
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -1777,22 +1787,53 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
     localStorage.setItem('miacompass_saved_items', JSON.stringify(savedItems));
   }, [savedItems]);
 
-  // Sync savedItems with Firestore
+  // Sync savedItems with Firestore (Debounced to save quota)
   useEffect(() => {
-    if (user) {
+    if (!user) return;
+
+    const timeoutId = setTimeout(() => {
       const userRef = doc(db, 'users', user.uid);
       setDoc(userRef, { savedItems }, { merge: true }).catch(err => {
-        handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+        // Silently catch quota errors to prevent app crash, but log them
+        if (err instanceof Error && err.message.includes('resource-exhausted')) {
+          console.warn("Firestore write quota exceeded. Changes saved locally but not synced to cloud.");
+        } else {
+          handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+        }
       });
-    }
+    }, 3000); // 3 second debounce
+
+    return () => clearTimeout(timeoutId);
   }, [savedItems, user]);
 
-  // Load savedItems from profile
+  // Load savedItems from profile (only if different to avoid loops)
   useEffect(() => {
     if (profile?.savedItems) {
-      setSavedItems(profile.savedItems);
+      const currentStr = JSON.stringify(savedItems);
+      const profileStr = JSON.stringify(profile.savedItems);
+      if (currentStr !== profileStr) {
+        setSavedItems(profile.savedItems);
+      }
     }
-  }, [profile]);
+  }, [profile, savedItems]);
+
+  // Sync surveyData with Firestore (Debounced to save quota)
+  useEffect(() => {
+    if (!user) return;
+
+    const timeoutId = setTimeout(() => {
+      const userRef = doc(db, 'users', user.uid);
+      setDoc(userRef, { lastSurveyData: surveyData }, { merge: true }).catch(err => {
+        if (err instanceof Error && err.message.includes('resource-exhausted')) {
+          console.warn("Firestore write quota exceeded. Survey data saved locally.");
+        } else {
+          handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+        }
+      });
+    }, 5000); // 5 second debounce for survey data
+
+    return () => clearTimeout(timeoutId);
+  }, [surveyData, user]);
 
   const handleLogout = () => logout();
 
@@ -1839,7 +1880,11 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
                 if (user) {
                   const userRef = doc(db, 'users', user.uid);
                   setDoc(userRef, { lastSurveyData: newData }, { merge: true }).catch(err => {
-                    handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+                    if (err instanceof Error && err.message.includes('resource-exhausted')) {
+                      console.warn("Firestore write quota exceeded. Language preference saved locally.");
+                    } else {
+                      handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+                    }
                   });
                 }
               }}
@@ -1914,6 +1959,7 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
         </div>
         <div className="max-w-5xl mx-auto px-4 flex overflow-x-auto no-scrollbar" role="tablist" aria-label="Dashboard navigation">
           <TabBtn id="resources" active={activeTab} onClick={setActiveTab} label={t.resources} icon={Building2} />
+          <TabBtn id="plan" active={activeTab} onClick={setActiveTab} label={t.plan} icon={ClipboardList} />
           <TabBtn id="edugrants" active={activeTab} onClick={setActiveTab} label={t.edugrants} icon={GraduationCap} />
           <TabBtn id="jobs" active={activeTab} onClick={setActiveTab} label={t.jobs} icon={Briefcase} />
           <TabBtn id="transit" active={activeTab} onClick={setActiveTab} label={t.transit} icon={Bus} />
@@ -1924,6 +1970,19 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
 
       <main className="flex-1 max-w-5xl mx-auto w-full p-6">
         {activeTab === 'resources' && <ResourcesPanel plan={plan} urgency={surveyData.urgency} savedItems={savedItems} setSavedItems={setSavedItems} language={surveyData.language} onStartNewSearch={handleStartNewSearch} />}
+        {activeTab === 'plan' && (
+          <MyPlanPanel 
+            savedItems={savedItems} 
+            setSavedItems={setSavedItems} 
+            surveyData={surveyData} 
+            setSurveyData={setSurveyData} 
+            plan={plan} 
+            setPlan={setPlan} 
+            user={user} 
+            onStartNewSearch={handleStartNewSearch} 
+            searchHistory={profile?.searchHistory || []} 
+          />
+        )}
         {activeTab === 'edugrants' && <EduGrantsPanel surveyData={surveyData} savedItems={savedItems} setSavedItems={setSavedItems} />}
         {activeTab === 'jobs' && <JobsPanel surveyData={surveyData} savedItems={savedItems} setSavedItems={setSavedItems} onNotification={addNotification} />}
         {activeTab === 'transit' && <TransitPanel surveyData={surveyData} />}
@@ -2013,10 +2072,18 @@ function ProfilePanel({
       
       if (user) {
         const userRef = doc(db, 'users', user.uid);
-        await setDoc(userRef, { 
-          currentPlan: generatedPlan,
-          lastSurveyData: surveyData
-        }, { merge: true });
+        try {
+          await setDoc(userRef, { 
+            currentPlan: generatedPlan,
+            lastSurveyData: surveyData
+          }, { merge: true });
+        } catch (err) {
+          if (err instanceof Error && err.message.includes('resource-exhausted')) {
+            console.warn("Firestore write quota exceeded. Plan saved locally.");
+          } else {
+            throw err;
+          }
+        }
       }
       alert(t.refreshPlan);
     } catch (error) {
@@ -2030,20 +2097,13 @@ function ProfilePanel({
   const updateField = (key: keyof SurveyData, value: any) => {
     const newData = { ...surveyData, [key]: value };
     setSurveyData(newData);
-    // Save to Firestore if user exists
-    if (user) {
-      const userRef = doc(db, 'users', user.uid);
-      setDoc(userRef, { lastSurveyData: newData }, { merge: true }).catch(console.error);
-    }
+    // Debounced sync handled by useEffect
   };
 
   const updateFields = (fields: Partial<SurveyData>) => {
     const newData = { ...surveyData, ...fields };
     setSurveyData(newData);
-    if (user) {
-      const userRef = doc(db, 'users', user.uid);
-      setDoc(userRef, { lastSurveyData: newData }, { merge: true }).catch(console.error);
-    }
+    // Debounced sync handled by useEffect
   };
 
   return (
@@ -2328,7 +2388,7 @@ function ResourcesPanel({ plan, urgency, savedItems, setSavedItems, language, on
     
     // More robust regex to find the steps section
     // Handles variations in emojis, text, and formatting
-    const stepsRegex = /(?:###?\s*)?(?:YOUR\s+)?(?:NEXT\s+STEPS|PRÓXIMOS\s+PASOS)(?:\s+IN\s+ORDER)?\s*:?/i;
+    const stepsRegex = /(?:###?\s*)?(?:[^\w\s]+\s*)?(?:YOUR\s+)?(?:NEXT\s+STEPS|PRÓXIMOS\s+PASOS)(?:\s+IN\s+ORDER)?\s*:?/i;
     const match = plan.match(stepsRegex);
     
     let stepsSection = '';
@@ -3100,10 +3160,18 @@ function MyPlanPanel({ savedItems, setSavedItems, surveyData, setSurveyData, pla
       // Save to Firestore
       if (user) {
         const userRef = doc(db, 'users', user.uid);
-        await setDoc(userRef, { 
-          currentPlan: updatedPlan,
-          lastSurveyData: updatedSurveyData
-        }, { merge: true });
+        try {
+          await setDoc(userRef, { 
+            currentPlan: updatedPlan,
+            lastSurveyData: updatedSurveyData
+          }, { merge: true });
+        } catch (err) {
+          if (err instanceof Error && err.message.includes('resource-exhausted')) {
+            console.warn("Firestore write quota exceeded. Additional resources saved locally.");
+          } else {
+            throw err;
+          }
+        }
       }
 
       alert(`${newNeeds.length} new resource areas added to your plan!`);
@@ -3386,7 +3454,11 @@ function FeedbackModal({ onClose, language, user }: { onClose: () => void, langu
       setTimeout(() => onClose(), 3000);
     } catch (error) {
       console.error("Failed to submit feedback", error);
-      alert(t.feedbackError);
+      if (error instanceof Error && error.message.includes('resource-exhausted')) {
+        alert("Daily feedback limit reached. Please try again tomorrow.");
+      } else {
+        alert(t.feedbackError);
+      }
     } finally {
       setIsSubmitting(false);
     }
