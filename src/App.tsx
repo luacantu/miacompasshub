@@ -628,12 +628,16 @@ export default function App() {
           plan: generatedPlan
         };
 
-        await setDoc(userRef, { 
-          surveyCompleted: true,
-          lastSurveyData: data,
-          currentPlan: generatedPlan,
-          searchHistory: arrayUnion(historyItem)
-        }, { merge: true });
+        try {
+          await setDoc(userRef, { 
+            surveyCompleted: true,
+            lastSurveyData: data,
+            currentPlan: generatedPlan,
+            searchHistory: arrayUnion(historyItem)
+          }, { merge: true });
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
+        }
       }
       
       setView('dashboard');

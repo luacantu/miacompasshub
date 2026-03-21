@@ -11,12 +11,16 @@
         "photoURL": { "type": "string", "description": "User's profile photo URL" },
         "role": { "type": "string", "enum": ["user", "admin"], "description": "User's role" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "surveyCompleted": { "type": "boolean", "description": "Whether the user has completed the onboarding survey" },
+        "lastSurveyData": { "type": "object", "description": "The most recent survey responses" },
+        "currentPlan": { "type": "string", "description": "The current AI-generated action plan" },
+        "searchHistory": { "type": "array", "items": { "type": "object" }, "description": "History of generated plans and survey data" },
         "savedItems": {
           "type": "object",
           "properties": {
             "programs": { "type": "array", "items": { "type": "object" } },
             "jobs": { "type": "array", "items": { "type": "object" } },
-            "steps": { "type": "array", "items": { "type": "string" } }
+            "steps": { "type": "array", "items": { "type": "object" } }
           }
         }
       },

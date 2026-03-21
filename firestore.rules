@@ -66,12 +66,15 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['uid', 'displayName', 'email', 'photoURL', 'role', 'createdAt', 'surveyCompleted', 'lastSurveyData', 'currentPlan', 'savedItems']) &&
+      return hasOnlyAllowedFields(['uid', 'displayName', 'email', 'photoURL', 'role', 'createdAt', 'surveyCompleted', 'lastSurveyData', 'currentPlan', 'savedItems', 'searchHistory']) &&
              data.uid is string && data.uid.size() > 0 &&
              data.email is string && isValidEmail(data.email) &&
              (!('role' in data) || data.role in ['user', 'admin']) &&
              (!('surveyCompleted' in data) || data.surveyCompleted is bool) &&
-             (!('savedItems' in data) || data.savedItems is map);
+             (!('savedItems' in data) || data.savedItems is map) &&
+             (!('lastSurveyData' in data) || data.lastSurveyData is map) &&
+             (!('currentPlan' in data) || data.currentPlan is string) &&
+             (!('searchHistory' in data) || data.searchHistory is list);
     }
 
     function isValidResource(data) {
