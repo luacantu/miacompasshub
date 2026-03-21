@@ -160,8 +160,8 @@ work better for the people in it.
 
 MIACompass Hub was born from personal experience.
 
-In 2012, the founder was a domestic violence survivor 
-who was evicted and left with her daughter and nothing. 
+In 2012, the founder was a dv survivor who was evicted 
+and left with her daughter and nothing. 
 Resources existed — housing help, food assistance, 
 legal aid — but the stress of survival, language 
 barriers, and scattered information made them 
