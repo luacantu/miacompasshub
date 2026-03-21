@@ -1,0 +1,121 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - User's unique ID
+    //   - displayName: string (optional) - User's display name
+    //   - email: string (required, email format) - User's email address
+    //   - photoURL: string (optional) - User's profile photo URL
+    //   - role: string (enum: user, admin) - User's role
+    //   - createdAt: timestamp (optional) - Creation timestamp
+    //
+    // Collection: resources
+    // Document ID: {resourceId}
+    // Fields:
+    //   - title: string (required) - Resource title
+    //   - category: string (required) - Resource category
+    //   - description: string (optional) - Resource description
+    //   - location: string (optional) - Resource location
+    //   - authorUid: string (required) - User who added the resource
+    //   - createdAt: timestamp (optional) - Creation timestamp
+    //
+    // Collection: chats
+    // Document ID: {chatId}
+    // Fields:
+    //   - text: string (required) - Message text
+    //   - authorUid: string (required) - User who sent the message
+    //   - authorName: string (optional) - Name of the sender
+    //   - createdAt: timestamp (required) - Creation timestamp
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "luacantu@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'displayName', 'email', 'photoURL', 'role', 'createdAt', 'surveyCompleted', 'lastSurveyData', 'currentPlan', 'savedItems']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             (!('role' in data) || data.role in ['user', 'admin']) &&
+             (!('surveyCompleted' in data) || data.surveyCompleted is bool) &&
+             (!('savedItems' in data) || data.savedItems is map);
+    }
+
+    function isValidResource(data) {
+      return hasOnlyAllowedFields(['title', 'category', 'description', 'location', 'authorUid', 'createdAt']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.category is string && data.category.size() > 0 &&
+             data.authorUid is string && data.authorUid == request.auth.uid;
+    }
+
+    function isValidChatMessage(data) {
+      return hasOnlyAllowedFields(['text', 'authorUid', 'authorName', 'createdAt']) &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 1000 &&
+             data.authorUid is string && data.authorUid == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                      ((isOwner(userId) && (!('role' in request.resource.data) || request.resource.data.role == 'user')) || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+                      ((isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin());
+    }
+
+    match /resources/{resourceId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidResource(request.resource.data);
+      allow update: if isAuthenticated() && isValidResource(request.resource.data) && 
+                      (request.resource.data.authorUid == resource.data.authorUid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.authorUid == request.auth.uid || isAdmin());
+    }
+
+    match /chats/{chatId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidChatMessage(request.resource.data);
+      allow update, delete: if isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

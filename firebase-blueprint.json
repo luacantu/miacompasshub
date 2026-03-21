@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User's unique ID" },
+        "displayName": { "type": "string", "description": "User's display name" },
+        "email": { "type": "string", "format": "email", "description": "User's email address" },
+        "photoURL": { "type": "string", "description": "User's profile photo URL" },
+        "role": { "type": "string", "enum": ["user", "admin"], "description": "User's role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "savedItems": {
+          "type": "object",
+          "properties": {
+            "programs": { "type": "array", "items": { "type": "object" } },
+            "jobs": { "type": "array", "items": { "type": "object" } },
+            "steps": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "Resource": {
+      "title": "Community Resource",
+      "description": "A community resource (e.g., food pantry, job center)",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Resource title" },
+        "category": { "type": "string", "description": "Resource category" },
+        "description": { "type": "string", "description": "Resource description" },
+        "location": { "type": "string", "description": "Resource location" },
+        "authorUid": { "type": "string", "description": "User who added the resource" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["title", "category", "authorUid"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "A message in a community chat",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "Message text" },
+        "authorUid": { "type": "string", "description": "User who sent the message" },
+        "authorName": { "type": "string", "description": "Name of the sender" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["text", "authorUid", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile documents"
+    },
+    "/resources/{resourceId}": {
+      "schema": "Resource",
+      "description": "Community resources"
+    },
+    "/chats/{chatId}": {
+      "schema": "ChatMessage",
+      "description": "Community chat messages"
+    }
+  }
+}

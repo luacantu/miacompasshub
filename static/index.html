@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIACompass Hub — Miami-Dade Resource Navigator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --deep-blue: #0cc0df;
+            --teal: #0D7C7C;
+            --coral: #D94F2A;
+            --sand: #F8F4EF;
+        }
+        body {
+            font-family: 'Lato', sans-serif;
+            background-color: var(--sand);
+            color: #0A3D6B; /* Keep text readable with dark blue */
+        }
+        h1, h2, h3, h4, .heading {
+            font-family: 'Lato', sans-serif;
+            font-weight: 700;
+            color: var(--deep-blue);
+        }
+        #landing-page h1, #loading-page h2 {
+            color: white;
+        }
+        #landing-page p {
+            font-size: 18px !important;
+        }
+        #landing-page .grid i {
+            color: #ff73cf;
+            width: 32px;
+            height: 32px;
+        }
+        .btn-primary {
+            background-color: var(--deep-blue);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .card {
+            background: white;
+            border-radius: 1.5rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+        .step-indicator {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            border: 2px solid var(--deep-blue);
+        }
+        .step-indicator.active {
+            background-color: var(--deep-blue);
+            color: white;
+        }
+        .tab-btn {
+            padding: 1rem;
+            font-weight: 600;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            color: var(--coral);
+            border-bottom-color: var(--coral);
+        }
+        .loading-compass {
+            animation: spin 3s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .chat-bubble {
+            max-width: 80%;
+            padding: 1rem;
+            border-radius: 1rem;
+            margin-bottom: 1rem;
+        }
+        .chat-user {
+            background-color: var(--deep-blue);
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 0.25rem;
+        }
+        .chat-agent {
+            background-color: white;
+            color: var(--deep-blue);
+            align-self: flex-start;
+            border-bottom-left-radius: 0.25rem;
+            border: 1px solid rgba(10, 61, 107, 0.1);
+        }
+        .markdown-body h1 { font-size: 1.5rem; margin-top: 1rem; margin-bottom: 0.5rem; color: var(--deep-blue); border-bottom: 2px solid var(--teal); padding-bottom: 0.25rem; }
+        .markdown-body h2 { font-size: 1.25rem; margin-top: 1rem; margin-bottom: 0.5rem; color: var(--teal); }
+        .markdown-body p { margin-bottom: 0.75rem; line-height: 1.6; }
+        .markdown-body ul { list-style-type: disc; margin-left: 1.5rem; margin-bottom: 1rem; }
+        .markdown-body li { margin-bottom: 0.5rem; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Landing Page -->
+    <div id="landing-page" class="flex-1 flex flex-col items-center justify-center p-6 text-center bg-[#0cc0df] text-white">
+        <div class="mb-8">
+            <span class="text-8xl block mb-4 text-[#D94F2A]"><i data-lucide="compass" class="w-24 h-24 mx-auto"></i></span>
+            <h1 class="text-5xl md:text-7xl mb-4">MIACompass Hub</h1>
+            <p class="text-xl md:text-2xl opacity-90 max-w-2xl mx-auto">Your personalized navigator for community resources in Miami-Dade.</p>
+        </div>
+        
+        <div class="space-y-4 w-full max-w-sm">
+            <button onclick="startOnboarding()" class="w-full bg-white text-[#0cc0df] py-4 rounded-full font-bold text-xl flex items-center justify-center gap-3 shadow-xl hover:bg-opacity-90 transition-all">
+                <i data-lucide="log-in"></i> Sign in with Google
+            </button>
+            <button onclick="startOnboarding()" class="w-full bg-transparent border-2 border-white text-white py-4 rounded-full font-bold text-xl hover:bg-white hover:text-[#0cc0df] transition-all">
+                Skip for now
+            </button>
+        </div>
+
+        <div class="mt-16 grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl">
+            <div class="flex flex-col items-center">
+                <i data-lucide="shield-check" class="mb-2"></i>
+                <span class="text-sm">Verified Resources</span>
+            </div>
+            <div class="flex flex-col items-center">
+                <i data-lucide="briefcase" class="mb-2"></i>
+                <span class="text-sm">Job Matching</span>
+            </div>
+            <div class="flex flex-col items-center">
+                <i data-lucide="bus" class="mb-2"></i>
+                <span class="text-sm">Transit Planner</span>
+            </div>
+            <div class="flex flex-col items-center">
+                <i data-lucide="message-circle" class="mb-2"></i>
+                <span class="text-sm">AI Support</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Onboarding Survey -->
+    <div id="survey-page" class="hidden flex-1 flex flex-col items-center justify-center p-6">
+        <div class="w-full max-w-2xl card p-8">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-2xl">Onboarding Survey</h2>
+                <div class="text-sm font-bold opacity-60">Step <span id="current-step-num">1</span> of 5</div>
+            </div>
+            
+            <div class="w-full bg-[#F8F4EF] h-2 rounded-full mb-8 border border-black/5">
+                <div id="progress-bar" class="bg-[#D94F2A] h-full rounded-full transition-all duration-300" style="width: 20%;"></div>
+            </div>
+
+            <div id="step-1" class="survey-step">
+                <h3 class="text-xl mb-6">Tell us about yourself</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold mb-2">Preferred Language</label>
+                        <select id="language" class="w-full p-3 border rounded-xl">
+                            <option value="English">English</option>
+                            <option value="Spanish">Español</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold mb-2">Age</label>
+                        <input type="number" id="age" placeholder="e.g. 35" class="w-full p-3 border rounded-xl">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold mb-2">Family Situation</label>
+                        <select id="family-status" class="w-full p-3 border rounded-xl">
+                            <option value="Single">Single</option>
+                            <option value="Married">Married</option>
+                            <option value="Single Parent">Single Parent</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold mb-2">Number of Children</label>
+                        <input type="number" id="children" placeholder="0" class="w-full p-3 border rounded-xl">
+                    </div>
+                </div>
+            </div>
+
+            <div id="step-2" class="survey-step hidden">
+                <h3 class="text-xl mb-6">Work & Housing</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold mb-2">Employment Status</label>
+                        <select id="employment" class="w-full p-3 border rounded-xl">
+                            <option value="Employed">Employed</option>
+                            <option value="Unemployed">Unemployed</option>
+                            <option value="Student">Student</option>
+                            <option value="Retired">Retired</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold mb-2">Housing Situation</label>
+                        <select id="housing" class="w-full p-3 border rounded-xl">
+                            <option value="Stable">Stable Housing</option>
+                            <option value="At Risk">At Risk of Eviction</option>
+                            <option value="Unsheltered">Unsheltered</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold mb-2">Monthly Income Range</label>
+                        <select id="income" class="w-full p-3 border rounded-xl">
+                            <option value="Low">Under $2,000</option>
+                            <option value="Medium">$2,000 - $4,000</option>
+                            <option value="High">Above $4,000</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold mb-2">Health Insurance</label>
+                        <select id="insurance" class="w-full p-3 border rounded-xl">
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="step-3" class="survey-step hidden">
+                <h3 class="text-xl mb-6">What do you need help with?</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" name="needs" value="food" class="w-5 h-5"> Food
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" name="needs" value="housing" class="w-5 h-5"> Housing
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" name="needs" value="health" class="w-5 h-5"> Health
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" name="needs" value="jobs" class="w-5 h-5"> Jobs
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" name="needs" value="childcare" class="w-5 h-5"> Childcare
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" name="needs" value="utilities" class="w-5 h-5"> Utilities
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" name="needs" value="education" class="w-5 h-5"> Education
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" name="needs" value="transportation" class="w-5 h-5"> Transport
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" name="needs" value="legal" class="w-5 h-5"> Legal
+                    </label>
+                    <label class="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox" name="needs" value="mental health" class="w-5 h-5"> Mental Health
+                    </label>
+                </div>
+            </div>
+
+            <div id="step-4" class="survey-step hidden">
+                <h3 class="text-xl mb-6">Location</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-bold mb-2">Zip Code</label>
+                        <input type="text" id="zip" placeholder="33101" class="w-full p-3 border rounded-xl">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold mb-2">Neighborhood</label>
+                        <select id="neighborhood" class="w-full p-3 border rounded-xl">
+                            <option value="Other">Other / Not Listed</option>
+                            <option value="Hialeah">Hialeah</option>
+                            <option value="Miami Beach">Miami Beach</option>
+                            <option value="Homestead">Homestead</option>
+                            <option value="North Miami">North Miami</option>
+                            <option value="Little Havana">Little Havana</option>
+                            <option value="Little Haiti">Little Haiti</option>
+                            <option value="Overtown">Overtown</option>
+                            <option value="Liberty City">Liberty City</option>
+                            <option value="Coral Gables">Coral Gables</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div id="step-5" class="survey-step hidden">
+                <h3 class="text-xl mb-6">Urgency</h3>
+                <div class="space-y-4">
+                    <label class="flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer hover:border-[#D94F2A] transition-all">
+                        <input type="radio" name="urgency" value="critical" class="w-6 h-6">
+                        <div>
+                            <div class="font-bold text-[#D94F2A] flex items-center gap-2"><i data-lucide="alert-circle" class="w-5 h-5"></i> Critical</div>
+                            <div class="text-sm opacity-70">I need help immediately (within 24 hours)</div>
+                        </div>
+                    </label>
+                    <label class="flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer hover:border-[#D94F2A] transition-all">
+                        <input type="radio" name="urgency" value="high" class="w-6 h-6">
+                        <div>
+                            <div class="font-bold flex items-center gap-2"><i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-500"></i> High</div>
+                            <div class="text-sm opacity-70">I need help soon (within a few days)</div>
+                        </div>
+                    </label>
+                    <label class="flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer hover:border-[#0A3D6B] transition-all">
+                        <input type="radio" name="urgency" value="normal" checked class="w-6 h-6">
+                        <div>
+                            <div class="font-bold flex items-center gap-2"><i data-lucide="check-circle-2" class="w-5 h-5 text-teal"></i> Normal</div>
+                            <div class="text-sm opacity-70">I am planning for the future</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex justify-between mt-12">
+                <button id="prev-btn" onclick="prevStep()" class="hidden px-6 py-2 font-bold opacity-60 hover:opacity-100">Back</button>
+                <div class="flex-1"></div>
+                <button id="next-btn" onclick="nextStep()" class="btn-primary">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Screen -->
+    <div id="loading-page" class="hidden flex-1 flex flex-col items-center justify-center p-6 bg-[#0cc0df] text-white">
+        <div class="text-8xl mb-8 loading-compass text-white"><i data-lucide="compass" class="w-24 h-24"></i></div>
+        <h2 class="text-3xl mb-8">Navigating your resources...</h2>
+        
+        <div class="space-y-4 w-full max-w-xs">
+            <div id="load-step-1" class="flex items-center gap-3 opacity-40 transition-opacity duration-500">
+                <div class="w-4 h-4 rounded-full bg-white"></div>
+                <span>Analyzing your profile</span>
+            </div>
+            <div id="load-step-2" class="flex items-center gap-3 opacity-40 transition-opacity duration-500">
+                <div class="w-4 h-4 rounded-full bg-white"></div>
+                <span>Searching verified programs</span>
+            </div>
+            <div id="load-step-3" class="flex items-center gap-3 opacity-40 transition-opacity duration-500">
+                <div class="w-4 h-4 rounded-full bg-white"></div>
+                <span>Checking eligibility</span>
+            </div>
+            <div id="load-step-4" class="flex items-center gap-3 opacity-40 transition-opacity duration-500">
+                <div class="w-4 h-4 rounded-full bg-white"></div>
+                <span>Building your action plan</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard-page" class="hidden flex-1 flex flex-col">
+        <!-- Sticky Nav -->
+        <nav class="sticky top-0 bg-white border-b z-50">
+            <div class="max-w-5xl mx-auto px-4 flex justify-between items-center h-16">
+                <div class="flex items-center gap-2 font-bold text-xl heading">
+                    <span class="text-coral"><i data-lucide="compass" class="w-6 h-6"></i></span> MIACompass
+                </div>
+                <div class="flex items-center gap-4">
+                    <button onclick="showTab('plan')" class="relative p-2 hover:bg-gray-100 rounded-full">
+                        <i data-lucide="clipboard-list"></i>
+                        <span id="saved-badge" class="absolute -top-1 -right-1 bg-[#D94F2A] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center hidden">0</span>
+                    </button>
+                    <div class="w-8 h-8 rounded-full bg-[#0D7C7C] text-white flex items-center justify-center font-bold">U</div>
+                </div>
+            </div>
+            <div class="max-w-5xl mx-auto px-4 flex overflow-x-auto no-scrollbar">
+                <button onclick="showTab('resources')" class="tab-btn active whitespace-nowrap flex items-center gap-2" id="tab-resources"><i data-lucide="building-2" class="w-4 h-4"></i> Resources</button>
+                <button onclick="showTab('jobs')" class="tab-btn whitespace-nowrap flex items-center gap-2" id="tab-jobs"><i data-lucide="briefcase" class="w-4 h-4"></i> Jobs</button>
+                <button onclick="showTab('transit')" class="tab-btn whitespace-nowrap flex items-center gap-2" id="tab-transit"><i data-lucide="bus" class="w-4 h-4"></i> Transit Hub</button>
+                <button onclick="showTab('chat')" class="tab-btn whitespace-nowrap flex items-center gap-2" id="tab-chat"><i data-lucide="message-square" class="w-4 h-4"></i> Ask MIACompa</button>
+                <button onclick="showTab('plan')" class="tab-btn whitespace-nowrap flex items-center gap-2" id="tab-plan"><i data-lucide="clipboard-list" class="w-4 h-4"></i> My Plan</button>
+            </div>
+        </nav>
+
+        <main class="flex-1 max-w-5xl mx-auto w-full p-6">
+            <!-- Resources Tab -->
+            <div id="panel-resources" class="tab-panel">
+                <div id="crisis-banner" class="hidden bg-[#D94F2A] text-white p-4 rounded-2xl mb-6 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <i data-lucide="alert-triangle"></i>
+                        <div>
+                            <div class="font-bold">CRITICAL URGENCY DETECTED</div>
+                            <div class="text-sm">Call 2-1-1 immediately for emergency assistance.</div>
+                        </div>
+                    </div>
+                    <a href="tel:211" class="bg-white text-[#D94F2A] px-4 py-2 rounded-full font-bold">Call Now</a>
+                </div>
+                
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-3xl">Your Resource Plan</h2>
+                    <div class="flex gap-2">
+                        <button onclick="window.print()" class="p-2 hover:bg-white rounded-xl border"><i data-lucide="printer" class="w-5 h-5"></i></button>
+                        <button onclick="copyPlan()" class="p-2 hover:bg-white rounded-xl border"><i data-lucide="copy" class="w-5 h-5"></i></button>
+                    </div>
+                </div>
+
+                <div id="plan-content" class="card p-8 markdown-body">
+                    <!-- AI Content will be injected here -->
+                </div>
+                
+                <div class="mt-8 flex justify-center">
+                    <button onclick="saveAllSteps()" class="btn-primary flex items-center gap-2">
+                        <i data-lucide="save"></i> Save Steps to My Plan
+                    </button>
+                </div>
+            </div>
+
+            <!-- Jobs Tab -->
+            <div id="panel-jobs" class="tab-panel hidden">
+                <div class="bg-white p-6 rounded-2xl border-2 border-[#0D7C7C] mb-6 flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 bg-[#0D7C7C] bg-opacity-10 rounded-full flex items-center justify-center text-[#0D7C7C]">
+                            <i data-lucide="briefcase"></i>
+                        </div>
+                        <div>
+                            <div class="font-bold">CareerSource South Florida</div>
+                            <div class="text-sm opacity-70">Free job training and placement services.</div>
+                        </div>
+                    </div>
+                    <a href="https://careersourcesfl.com" target="_blank" class="text-[#0D7C7C] font-bold underline">Visit Website</a>
+                </div>
+
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-3xl">Local Job Openings</h2>
+                    <button onclick="fetchJobs()" class="flex items-center gap-2 text-sm font-bold opacity-60 hover:opacity-100">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i> Refresh
+                    </button>
+                </div>
+
+                <div id="jobs-content" class="space-y-4">
+                    <!-- Jobs will be injected here -->
+                    <div class="text-center py-12 opacity-50">
+                        <p>Click refresh to find jobs matching your profile.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transit Tab -->
+            <div id="panel-transit" class="tab-panel hidden">
+                <h2 class="text-3xl mb-6">Transit Hub</h2>
+                
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div class="card p-6">
+                        <h3 class="text-xl mb-4 flex items-center gap-2"><i data-lucide="map-pin" class="text-[#D94F2A]"></i> Trip Planner</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-bold uppercase opacity-60 mb-1">From</label>
+                                <input type="text" id="transit-from" placeholder="Current Location" class="w-full p-3 border rounded-xl">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase opacity-60 mb-1">To</label>
+                                <input type="text" id="transit-to" placeholder="Destination Address" class="w-full p-3 border rounded-xl">
+                            </div>
+                            <button onclick="openGoogleMaps()" class="w-full bg-[#0cc0df] text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2">
+                                <i data-lucide="external-link"></i> Open in Google Maps
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="bg-white p-6 rounded-2xl border">
+                            <h3 class="font-bold mb-2">Miami-Dade Transit (MDT)</h3>
+                            <p class="text-sm opacity-80 mb-4">Standard fare is $2.25. Free for seniors 65+ with Golden Passport.</p>
+                            <div class="flex gap-2">
+                                <a href="https://www.miamidade.gov/transit" target="_blank" class="text-xs font-bold bg-gray-100 px-3 py-1 rounded-full">Schedules</a>
+                                <a href="https://www.miamidade.gov/global/service.page?Mduid_service=ser1482434190823521" target="_blank" class="text-xs font-bold bg-gray-100 px-3 py-1 rounded-full">Reduced Fares</a>
+                            </div>
+                        </div>
+                        <div class="bg-[#0D7C7C] bg-opacity-10 p-6 rounded-2xl border border-[#0D7C7C] border-opacity-20">
+                            <h3 class="font-bold text-[#0D7C7C] mb-2">Medicaid Transportation</h3>
+                            <p class="text-sm text-[#0D7C7C] opacity-80">Free rides to medical appointments for Medicaid members.</p>
+                            <div class="mt-2 font-bold text-[#0D7C7C]">Call: 1-855-832-6740</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Tab -->
+            <div id="panel-chat" class="tab-panel hidden flex flex-col h-[70vh] md:h-[600px]">
+                <h2 class="text-3xl mb-6">Ask MIACompa</h2>
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-4 flex flex-col gap-4 bg-white rounded-t-2xl border border-b-0">
+                    <div class="chat-bubble chat-agent">
+                        Hello! I'm your MIACompa assistant. I remember your profile and resource plan. How can I help you today?
+                    </div>
+                </div>
+                <div class="p-4 bg-white rounded-b-2xl border flex gap-2">
+                    <textarea id="chat-input" placeholder="Type a follow-up question..." class="flex-1 p-3 border rounded-xl resize-none h-12" onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); sendMessage();}"></textarea>
+                    <button onclick="sendMessage()" class="bg-[#0cc0df] text-white p-3 rounded-xl">
+                        <i data-lucide="send"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- My Plan Tab -->
+            <div id="panel-plan" class="tab-panel hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-3xl">My Plan</h2>
+                    <button onclick="window.print()" class="btn-primary flex items-center gap-2">
+                        <i data-lucide="printer"></i> Print Plan
+                    </button>
+                </div>
+
+                <div class="flex gap-4 mb-8 border-b">
+                    <button onclick="showSubTab('steps')" class="sub-tab-btn active pb-2 font-bold border-b-2 border-[#D94F2A]" id="sub-tab-steps">Action Steps</button>
+                    <button onclick="showSubTab('programs')" class="sub-tab-btn pb-2 font-bold border-b-2 border-transparent" id="sub-tab-programs">Saved Programs</button>
+                    <button onclick="showSubTab('jobs')" class="sub-tab-btn pb-2 font-bold border-b-2 border-transparent" id="sub-tab-jobs">Saved Jobs</button>
+                </div>
+
+                <div id="sub-panel-steps" class="sub-panel">
+                    <div id="saved-steps-list" class="space-y-3">
+                        <!-- Steps injected here -->
+                        <div class="text-center py-12 opacity-50">No action steps saved yet.</div>
+                    </div>
+                </div>
+
+                <div id="sub-panel-programs" class="sub-panel hidden">
+                    <div id="saved-programs-list" class="grid md:grid-cols-2 gap-4">
+                        <!-- Programs injected here -->
+                        <div class="col-span-2 text-center py-12 opacity-50">No programs saved yet.</div>
+                    </div>
+                </div>
+
+                <div id="sub-panel-jobs" class="sub-panel hidden">
+                    <div id="saved-jobs-list" class="space-y-4">
+                        <!-- Jobs injected here -->
+                        <div class="text-center py-12 opacity-50">No jobs saved yet.</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // State Management
+        let currentStep = 1;
+        let sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
+        let savedData = JSON.parse(localStorage.getItem('miacompass_saved')) || { programs: [], jobs: [], steps: [] };
+        let userProfile = {};
+
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Navigation Functions
+        function startOnboarding() {
+            document.getElementById('landing-page').classList.add('hidden');
+            document.getElementById('survey-page').classList.remove('hidden');
+        }
+
+        function nextStep() {
+            if (currentStep < 5) {
+                document.getElementById(`step-${currentStep}`).classList.add('hidden');
+                currentStep++;
+                document.getElementById(`step-${currentStep}`).classList.remove('hidden');
+                updateSurveyUI();
+            } else {
+                submitSurvey();
+            }
+        }
+
+        function prevStep() {
+            if (currentStep > 1) {
+                document.getElementById(`step-${currentStep}`).classList.add('hidden');
+                currentStep--;
+                document.getElementById(`step-${currentStep}`).classList.remove('hidden');
+                updateSurveyUI();
+            }
+        }
+
+        function updateSurveyUI() {
+            document.getElementById('current-step-num').innerText = currentStep;
+            document.getElementById('progress-bar').style.width = `${currentStep * 20}%`;
+            document.getElementById('prev-btn').classList.toggle('hidden', currentStep === 1);
+            document.getElementById('next-btn').innerText = currentStep === 5 ? 'Generate Plan' : 'Next';
+        }
+
+        function showTab(tabId) {
+            // Hide all panels
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+            // Show selected panel
+            document.getElementById(`panel-${tabId}`).classList.remove('hidden');
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            
+            if (tabId === 'plan') renderSavedData();
+        }
+
+        function showSubTab(subTabId) {
+            document.querySelectorAll('.sub-panel').forEach(p => p.classList.add('hidden'));
+            document.getElementById(`sub-panel-${subTabId}`).classList.remove('hidden');
+            document.querySelectorAll('.sub-tab-btn').forEach(b => {
+                b.classList.remove('active', 'border-[#D94F2A]');
+                b.classList.add('border-transparent');
+            });
+            const activeBtn = document.getElementById(`sub-tab-${subTabId}`);
+            activeBtn.classList.add('active', 'border-[#D94F2A]');
+            activeBtn.classList.remove('border-transparent');
+        }
+
+        // API Functions
+        async function submitSurvey() {
+            // Gather data
+            const needs = Array.from(document.querySelectorAll('input[name="needs"]:checked')).map(cb => cb.value);
+            const urgency = document.querySelector('input[name="urgency"]:checked').value;
+            
+            userProfile = {
+                language: document.getElementById('language').value,
+                age: document.getElementById('age').value,
+                family_status: document.getElementById('family-status').value,
+                children: document.getElementById('children').value,
+                employment: document.getElementById('employment').value,
+                housing: document.getElementById('housing').value,
+                income: document.getElementById('income').value,
+                insurance: document.getElementById('insurance').value,
+                needs: needs,
+                zip: document.getElementById('zip').value,
+                neighborhood: document.getElementById('neighborhood').value,
+                urgency: urgency
+            };
+
+            // Show loading
+            document.getElementById('survey-page').classList.add('hidden');
+            document.getElementById('loading-page').classList.remove('hidden');
+            
+            // Animate loading steps
+            for (let i = 1; i <= 4; i++) {
+                await new Promise(r => setTimeout(r, 1500));
+                document.getElementById(`load-step-${i}`).classList.remove('opacity-40');
+                document.getElementById(`load-step-${i}`).classList.add('opacity-100');
+            }
+
+            try {
+                const response = await fetch('/api/survey', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...userProfile, session_id: sessionId })
+                });
+                const data = await response.json();
+                
+                if (data.plan) {
+                    renderPlan(data.plan);
+                    if (urgency === 'critical') document.getElementById('crisis-banner').classList.remove('hidden');
+                    document.getElementById('loading-page').classList.add('hidden');
+                    document.getElementById('dashboard-page').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Something went wrong. Please try again.');
+                document.getElementById('loading-page').classList.add('hidden');
+                document.getElementById('survey-page').classList.remove('hidden');
+            }
+        }
+
+        async function fetchJobs() {
+            const content = document.getElementById('jobs-content');
+            content.innerHTML = '<div class="text-center py-12"><div class="loading-compass text-4xl inline-block text-[#0D7C7C]"><i data-lucide="compass" class="w-12 h-12"></i></div><p class="mt-4">Searching for jobs...</p></div>';
+            
+            try {
+                const response = await fetch('/api/jobs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: sessionId })
+                });
+                const data = await response.json();
+                content.innerHTML = marked.parse(data.jobs);
+                
+                // Add save buttons to job listings (simplified)
+                const jobItems = content.querySelectorAll('li');
+                jobItems.forEach(item => {
+                    const btn = document.createElement('button');
+                    btn.innerHTML = '<i data-lucide="plus" class="w-4 h-4"></i> Save';
+                    btn.className = 'ml-2 text-xs bg-gray-100 px-2 py-1 rounded hover:bg-gray-200';
+                    btn.onclick = () => saveItem('jobs', item.innerText);
+                    item.appendChild(btn);
+                });
+                lucide.createIcons();
+            } catch (error) {
+                content.innerHTML = '<p class="text-center text-red-500">Failed to load jobs.</p>';
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+
+            const chatMessages = document.getElementById('chat-messages');
+            
+            // Add user message
+            const userDiv = document.createElement('div');
+            userDiv.className = 'chat-bubble chat-user';
+            userDiv.innerText = message;
+            chatMessages.appendChild(userDiv);
+            
+            input.value = '';
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            // Add typing indicator
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'chat-bubble chat-agent italic opacity-50';
+            typingDiv.innerText = 'MIACompa is thinking...';
+            chatMessages.appendChild(typingDiv);
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message, session_id: sessionId })
+                });
+                const data = await response.json();
+                
+                chatMessages.removeChild(typingDiv);
+                
+                const agentDiv = document.createElement('div');
+                agentDiv.className = 'chat-bubble chat-agent';
+                agentDiv.innerHTML = marked.parse(data.response);
+                chatMessages.appendChild(agentDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            } catch (error) {
+                chatMessages.removeChild(typingDiv);
+                alert('Chat error');
+            }
+        }
+
+        // Helper Functions
+        function renderPlan(markdown) {
+            document.getElementById('plan-content').innerHTML = marked.parse(markdown);
+        }
+
+        function copyPlan() {
+            const text = document.getElementById('plan-content').innerText;
+            navigator.clipboard.writeText(text);
+            alert('Plan copied to clipboard!');
+        }
+
+        function openGoogleMaps() {
+            const from = encodeURIComponent(document.getElementById('transit-from').value || 'Current Location');
+            const to = encodeURIComponent(document.getElementById('transit-to').value);
+            if (!to) return alert('Please enter a destination');
+            window.open(`https://www.google.com/maps/dir/?api=1&origin=${from}&destination=${to}&travelmode=transit`, '_blank');
+        }
+
+        // Save Logic
+        function saveItem(type, content) {
+            if (!savedData[type].includes(content)) {
+                savedData[type].push(content);
+                localStorage.setItem('miacompass_saved', JSON.stringify(savedData));
+                updateBadge();
+            }
+        }
+
+        function saveAllSteps() {
+            const planText = document.getElementById('plan-content').innerText;
+            const stepsMatch = planText.match(/(?:YOUR NEXT STEPS IN ORDER|SUS PRÓXIMOS PASOS EN ORDEN):([\s\S]*?)(?=<i data-lucide="bus"|$)/);
+            if (stepsMatch) {
+                const steps = stepsMatch[1].trim().split('\n').filter(s => s.trim());
+                steps.forEach(s => saveItem('steps', s));
+                alert('Action steps saved to My Plan!');
+            }
+        }
+
+        function updateBadge() {
+            const total = savedData.programs.length + savedData.jobs.length + savedData.steps.length;
+            const badge = document.getElementById('saved-badge');
+            badge.innerText = total;
+            badge.classList.toggle('hidden', total === 0);
+        }
+
+        function renderSavedData() {
+            const stepsList = document.getElementById('saved-steps-list');
+            stepsList.innerHTML = savedData.steps.length ? '' : '<div class="text-center py-12 opacity-50">No action steps saved yet.</div>';
+            savedData.steps.forEach((step, i) => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center gap-3 p-4 bg-white rounded-xl border';
+                div.innerHTML = `
+                    <input type="checkbox" class="w-5 h-5">
+                    <span class="flex-1">${step}</span>
+                    <button onclick="removeItem('steps', ${i})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                `;
+                stepsList.appendChild(div);
+            });
+
+            const jobsList = document.getElementById('saved-jobs-list');
+            jobsList.innerHTML = savedData.jobs.length ? '' : '<div class="text-center py-12 opacity-50">No jobs saved yet.</div>';
+            savedData.jobs.forEach((job, i) => {
+                const div = document.createElement('div');
+                div.className = 'p-4 bg-white rounded-xl border flex justify-between items-start';
+                div.innerHTML = `
+                    <div class="text-sm">${job}</div>
+                    <button onclick="removeItem('jobs', ${i})" class="text-red-500"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                `;
+                jobsList.appendChild(div);
+            });
+            
+            lucide.createIcons();
+        }
+
+        function removeItem(type, index) {
+            savedData[type].splice(index, 1);
+            localStorage.setItem('miacompass_saved', JSON.stringify(savedData));
+            updateBadge();
+            renderSavedData();
+        }
+
+        updateBadge();
+    </script>
+</body>
+</html>
