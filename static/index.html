@@ -111,6 +111,13 @@
         .markdown-body li { margin-bottom: 0.5rem; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -350,6 +357,12 @@
                 <span>Building your action plan</span>
             </div>
         </div>
+
+        <p id="loading-status" class="mt-8 text-sm opacity-80 hidden">Still processing... almost ready.</p>
+        
+        <button id="skip-loading-btn" onclick="skipToChat()" class="mt-12 px-6 py-3 border-2 border-white rounded-full font-bold hover:bg-white hover:text-[#0cc0df] transition-all hidden animate-fade-in">
+            Skip — Use Chat Instead →
+        </button>
     </div>
 
     <!-- Dashboard -->
@@ -542,6 +555,8 @@
         let sessionId = 'session_' + Math.random().toString(36).substr(2, 9);
         let savedData = JSON.parse(localStorage.getItem('miacompass_saved')) || { programs: [], jobs: [], steps: [] };
         let userProfile = {};
+        let loadingInterval;
+        let loadingTimeouts = [];
 
         // Initialize Lucide icons
         lucide.createIcons();
@@ -603,6 +618,63 @@
             activeBtn.classList.remove('border-transparent');
         }
 
+        // Loading Screen Helpers
+        function startLoadingSteps() {
+            // Reset steps
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById(`load-step-${i}`).classList.add('opacity-40');
+                document.getElementById(`load-step-${i}`).classList.remove('opacity-100');
+            }
+            document.getElementById('loading-status').classList.add('hidden');
+            document.getElementById('skip-loading-btn').classList.add('hidden');
+
+            // Sequential highlight
+            let step = 1;
+            loadingInterval = setInterval(() => {
+                if (step <= 4) {
+                    document.getElementById(`load-step-${step}`).classList.remove('opacity-40');
+                    document.getElementById(`load-step-${step}`).classList.add('opacity-100');
+                    step++;
+                }
+            }, 2000);
+
+            // Show skip button after 15s
+            loadingTimeouts.push(setTimeout(() => {
+                document.getElementById('skip-loading-btn').classList.remove('hidden');
+            }, 15000));
+
+            // Show status message after 20s
+            loadingTimeouts.push(setTimeout(() => {
+                const status = document.getElementById('loading-status');
+                status.innerText = userProfile.language === 'Spanish' ? 'Sigue procesando... casi listo.' : 'Still processing... almost ready.';
+                status.classList.remove('hidden');
+            }, 20000));
+        }
+
+        function stopLoadingSteps() {
+            clearInterval(loadingInterval);
+            loadingTimeouts.forEach(t => clearTimeout(t));
+            loadingTimeouts = [];
+        }
+
+        function skipToChat() {
+            stopLoadingSteps();
+            document.getElementById('loading-page').classList.add('hidden');
+            document.getElementById('dashboard-page').classList.remove('hidden');
+            showTab('chat');
+            
+            const chatInput = document.getElementById('chat-input');
+            let profileSummary;
+            if (userProfile.language === 'Spanish') {
+                profileSummary = `Tengo ${userProfile.age} años, mi estado familiar es ${userProfile.family_status}, y necesito ayuda con ${userProfile.needs.join(', ')}.`;
+                chatInput.value = `Hola MIACompa, salté el análisis de la encuesta. ¿Puedes ayudarme a encontrar recursos basados en mi perfil? ${profileSummary}`;
+            } else {
+                profileSummary = `I am ${userProfile.age} years old, ${userProfile.family_status}, and I need help with ${userProfile.needs.join(', ')}.`;
+                chatInput.value = `Hi MIACompa, I skipped the survey analysis. Can you help me find resources based on my profile? ${profileSummary}`;
+            }
+            sendMessage();
+        }
+
         // API Functions
         async function submitSurvey() {
             // Gather data
@@ -628,21 +700,24 @@
             document.getElementById('survey-page').classList.add('hidden');
             document.getElementById('loading-page').classList.remove('hidden');
             
-            // Animate loading steps
-            for (let i = 1; i <= 4; i++) {
-                await new Promise(r => setTimeout(r, 1500));
-                document.getElementById(`load-step-${i}`).classList.remove('opacity-40');
-                document.getElementById(`load-step-${i}`).classList.add('opacity-100');
-            }
+            startLoadingSteps();
+
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('timeout')), 30000)
+            );
 
             try {
-                const response = await fetch('/api/survey', {
+                const fetchPromise = fetch('/api/survey', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ...userProfile, session_id: sessionId })
                 });
+
+                const response = await Promise.race([fetchPromise, timeoutPromise]);
                 const data = await response.json();
                 
+                stopLoadingSteps();
+
                 if (data.plan) {
                     renderPlan(data.plan);
                     if (urgency === 'critical') document.getElementById('crisis-banner').classList.remove('hidden');
@@ -650,10 +725,24 @@
                     document.getElementById('dashboard-page').classList.remove('hidden');
                 }
             } catch (error) {
+                stopLoadingSteps();
                 console.error('Error:', error);
-                alert('Something went wrong. Please try again.');
+                
+                if (error.message === 'timeout') {
+                    const fallbackMsg = userProfile.language === 'Spanish' 
+                        ? "# Lo sentimos\n\nEl análisis está tardando demasiado. Por favor, use el chat para obtener ayuda inmediata o llame al 2-1-1."
+                        : "# Sorry\n\nThe analysis is taking too long. Please use the chat for immediate help or call 2-1-1.";
+                    renderPlan(fallbackMsg);
+                } else {
+                    const errorMsg = userProfile.language === 'Spanish'
+                        ? "# Error de conexión\n\nHubo un problema al conectar. Puede intentar de nuevo o usar el chat."
+                        : "# Connection Error\n\nThere was a connection problem. You can try again or use the chat.";
+                    renderPlan(errorMsg);
+                }
+                
                 document.getElementById('loading-page').classList.add('hidden');
-                document.getElementById('survey-page').classList.remove('hidden');
+                document.getElementById('dashboard-page').classList.remove('hidden');
+                showTab('resources');
             }
         }
 

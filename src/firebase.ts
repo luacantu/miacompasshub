@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, collection, onSnapshot, query, orderBy, limit, addDoc, serverTimestamp, getDocFromServer, initializeFirestore } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, collection, onSnapshot, query, orderBy, limit, addDoc, serverTimestamp, getDocFromServer, initializeFirestore, DocumentReference, WithFieldValue, CollectionReference } from 'firebase/firestore';
 
 // Import the Firebase configuration
 import firebaseConfig from '../firebase-applet-config.json';
@@ -78,7 +78,28 @@ export interface FirestoreErrorInfo {
   }
 }
 
+// Quota error listener
+type QuotaErrorListener = () => void;
+const quotaErrorListeners: QuotaErrorListener[] = [];
+
+export const onQuotaExceeded = (listener: QuotaErrorListener) => {
+  quotaErrorListeners.push(listener);
+  return () => {
+    const index = quotaErrorListeners.indexOf(listener);
+    if (index > -1) quotaErrorListeners.splice(index, 1);
+  };
+};
+
+const notifyQuotaExceeded = () => {
+  quotaErrorListeners.forEach(l => l());
+};
+
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  if (error instanceof Error && (error.message.includes('resource-exhausted') || error.message.includes('Quota limit exceeded'))) {
+    console.warn(`Firestore quota exceeded during ${operationType} on ${path}. Falling back to local state.`);
+    notifyQuotaExceeded();
+    return; // Silently fail for quota errors to prevent crashing
+  }
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -100,6 +121,34 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
+
+export const safeSetDoc = async (ref: DocumentReference, data: WithFieldValue<any>, options?: any) => {
+  try {
+    await setDoc(ref, data, options);
+  } catch (err) {
+    if (err instanceof Error && (err.message.includes('resource-exhausted') || err.message.includes('Quota limit exceeded'))) {
+      console.warn("Firestore write quota exceeded. Changes saved locally only.");
+      notifyQuotaExceeded();
+    } else {
+      handleFirestoreError(err, OperationType.WRITE, ref.path);
+    }
+  }
+};
+
+export const safeAddDoc = async (ref: CollectionReference, data: WithFieldValue<any>) => {
+  try {
+    return await addDoc(ref, data);
+  } catch (err) {
+    if (err instanceof Error && (err.message.includes('resource-exhausted') || err.message.includes('Quota limit exceeded'))) {
+      console.warn("Firestore write quota exceeded. Document not added to cloud.");
+      notifyQuotaExceeded();
+      return null;
+    } else {
+      handleFirestoreError(err, OperationType.WRITE, ref.path);
+      return null;
+    }
+  }
+};
 
 // Connection Test
 async function testConnection() {

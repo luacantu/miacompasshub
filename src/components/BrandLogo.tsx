@@ -5,13 +5,15 @@ interface BrandLogoProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   showText?: boolean;
   light?: boolean;
+  hideSubtitleOnMobile?: boolean;
 }
 
 export const BrandLogo: React.FC<BrandLogoProps> = ({ 
   className = "", 
   size = 'md', 
   showText = true,
-  light = false 
+  light = false,
+  hideSubtitleOnMobile = false
 }) => {
   const sizes = {
     sm: { h: 24, font: 'text-xl' },

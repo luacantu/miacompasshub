@@ -54,11 +54,12 @@ import {
   Clock,
   DollarSign,
   Navigation,
-  MessageSquare
+  MessageSquare,
+  Phone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
-import { auth, signInWithGoogle, logout, db, handleFirestoreError, OperationType } from './firebase';
+import { auth, signInWithGoogle, logout, db, handleFirestoreError, OperationType, safeSetDoc, safeAddDoc, onQuotaExceeded } from './firebase';
 import { BrandLogo } from './components/BrandLogo';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, onSnapshot, query, orderBy, limit, addDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
@@ -262,7 +263,9 @@ const translations = {
     feedbackPlaceholder: "How can we improve MIACompass? Tell us about your experience...",
     submitFeedback: "Submit Feedback",
     feedbackSuccess: "Thank you for your feedback! We use your input to improve the hub for all residents.",
-    feedbackError: "Failed to send feedback. Please try again later."
+    feedbackError: "Failed to send feedback. Please try again later.",
+    skip: "Skip to Dashboard",
+    hotlineStrip: "EMERGENCY: CALL 2-1-1 FOR IMMEDIATE ASSISTANCE • CALL 9-8-8 FOR MENTAL HEALTH CRISIS • CALL 9-1-1 FOR EMERGENCIES"
   },
   Spanish: {
     dashboard: "Panel de Control",
@@ -460,7 +463,9 @@ const translations = {
     feedbackPlaceholder: "¿Cómo podemos mejorar el Centro MIACompass? Cuéntanos tu experiencia...",
     submitFeedback: "Enviar Comentarios",
     feedbackSuccess: "¡Gracias por tus comentarios! Utilizamos tu opinión para mejorar el centro para todos los residentes.",
-    feedbackError: "Error al enviar los comentarios. Por favor, inténtalo de nuevo más tarde."
+    feedbackError: "Error al enviar los comentarios. Por favor, inténtalo de nuevo más tarde.",
+    skip: "Saltar al Panel",
+    hotlineStrip: "EMERGENCIA: LLAME AL 2-1-1 PARA ASISTENCIA INMEDIATA • LLAME AL 9-8-8 PARA CRISIS DE SALUD MENTAL • LLAME AL 9-1-1 PARA EMERGENCIAS"
   }
 };
 
@@ -657,8 +662,7 @@ export default function App() {
         }, (err) => {
           // Only log if we still have a user (prevents errors on logout)
           if (auth.currentUser) {
-            console.error("Profile sync error:", err);
-            // We don't throw here to avoid crashing the app, just log
+            handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
           }
           setLoading(false);
         });
@@ -726,20 +730,12 @@ export default function App() {
           plan: generatedPlan
         };
 
-        try {
-          await setDoc(userRef, { 
-            surveyCompleted: true,
-            lastSurveyData: data,
-            currentPlan: generatedPlan,
-            searchHistory: arrayUnion(historyItem)
-          }, { merge: true });
-        } catch (err) {
-          if (err instanceof Error && err.message.includes('resource-exhausted')) {
-            console.warn("Firestore write quota exceeded. Plan saved locally.");
-          } else {
-            handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
-          }
-        }
+        await safeSetDoc(userRef, { 
+          surveyCompleted: true,
+          lastSurveyData: data,
+          currentPlan: generatedPlan,
+          searchHistory: arrayUnion(historyItem)
+        }, { merge: true });
       }
       
       setView('dashboard');
@@ -824,8 +820,8 @@ function LandingPage({ onStart, onLogin, user, language, onLanguageToggle }: { o
       className="flex-1 flex flex-col bg-white"
     >
       {/* Step 2: Emergency Hotlines Strip */}
-      <div className="sticky top-0 z-[100] bg-coral text-white py-2 px-4 overflow-x-auto whitespace-nowrap scrollbar-hide shadow-sm">
-        <div className="max-w-6xl mx-auto flex justify-center gap-4 md:gap-8 text-[10px] md:text-xs font-bold uppercase tracking-wider">
+      <div className="sticky top-0 z-[100] bg-coral text-white py-2 px-4 overflow-x-auto whitespace-nowrap scrollbar-hide shadow-sm no-scrollbar">
+        <div className="max-w-6xl mx-auto flex justify-start md:justify-center gap-4 md:gap-8 text-[10px] md:text-xs font-bold uppercase tracking-wider min-w-max">
           <a href="tel:911" className="hover:underline flex items-center gap-1">
             <AlertTriangle size={12} /> {t.emergency} 911
           </a>
@@ -842,25 +838,27 @@ function LandingPage({ onStart, onLogin, user, language, onLanguageToggle }: { o
       </div>
 
       {/* Step 3: Nav Bar */}
-      <nav className="bg-white border-b py-4 px-6">
+      <nav className="bg-white border-b py-4 px-4 md:px-6 sticky top-0 md:relative z-[110]">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <BrandLogo size="md" />
-          <div className="flex items-center gap-4">
+          <div className="flex-shrink-0 overflow-hidden">
+            <BrandLogo size="md" className="scale-90 md:scale-100 origin-left" hideSubtitleOnMobile={true} />
+          </div>
+          <div className="flex items-center gap-2 md:gap-4">
             {!user ? (
-              <button onClick={onLogin} className="hidden md:flex items-center gap-2 text-deep-blue font-bold text-sm hover:opacity-80">
-                <LogIn size={18} /> {t.signInGoogle}
+              <button onClick={onLogin} className="flex items-center gap-2 text-deep-blue font-bold text-xs md:text-sm hover:opacity-80">
+                <LogIn size={18} /> <span className="hidden sm:inline">{t.signInGoogle}</span>
               </button>
             ) : (
-              <div className="hidden md:flex items-center gap-2 text-deep-blue font-bold text-sm">
-                <UserIcon size={18} /> {user.displayName || 'User'}
+              <div className="flex items-center gap-2 text-deep-blue font-bold text-xs md:text-sm">
+                <UserIcon size={18} /> <span className="hidden sm:inline">{user.displayName || 'User'}</span>
               </div>
             )}
             <button 
               onClick={onLanguageToggle}
-              className="flex items-center gap-2 px-4 py-2 rounded-full border-2 border-deep-blue/10 hover:bg-deep-blue/5 transition-all text-sm font-bold text-deep-blue"
+              className="flex items-center gap-2 px-3 md:px-4 py-1.5 md:py-2 rounded-full border-2 border-deep-blue/10 hover:bg-deep-blue/5 transition-all text-xs md:text-sm font-bold text-deep-blue"
               aria-label="Toggle Language"
             >
-              <Globe size={18} className="text-deep-blue" />
+              <Globe size={16} className="text-deep-blue" />
               <span>{language === 'English' ? 'ES' : 'EN'}</span>
             </button>
           </div>
@@ -868,21 +866,21 @@ function LandingPage({ onStart, onLogin, user, language, onLanguageToggle }: { o
       </nav>
 
       {/* Step 4: Hero Section */}
-      <section className="flex-1 flex flex-col items-center justify-center px-6 py-20 text-center">
+      <section className="flex-1 flex flex-col items-center justify-center px-6 py-12 md:py-20 text-center">
         <div className="max-w-3xl mx-auto">
-          <h1 className="text-4xl md:text-6xl font-black text-deep-blue leading-tight mb-8">
+          <h1 className="text-[clamp(24px,5vw,46px)] font-black text-deep-blue leading-tight mb-8">
             {t.landingSubtitle}
           </h1>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center w-full sm:w-auto">
             <button 
               onClick={onStart} 
-              className="px-8 py-4 bg-deep-blue text-white rounded-full font-bold text-lg shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-8 py-4 bg-deep-blue text-white rounded-full font-bold text-lg shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2"
             >
               {t.findMyResources} <ChevronRight />
             </button>
             <button 
               onClick={onStart} 
-              className="px-8 py-4 bg-coral text-white rounded-full font-bold text-lg shadow-xl hover:scale-105 transition-all"
+              className="w-full sm:w-auto px-8 py-4 bg-coral text-white rounded-full font-bold text-lg shadow-xl hover:scale-105 transition-all"
             >
               {t.needHelpNow}
             </button>
@@ -892,7 +890,7 @@ function LandingPage({ onStart, onLogin, user, language, onLanguageToggle }: { o
 
       {/* Step 5: Trust Signals Bar */}
       <div className="bg-sand py-8 border-y">
-        <div className="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div className="max-w-6xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8">
           <div className="flex items-center gap-3 text-deep-blue font-bold text-sm">
             <div className="w-8 h-8 rounded-full bg-deep-blue/10 flex items-center justify-center flex-shrink-0">
               <Coins size={16} />
@@ -929,7 +927,7 @@ function LandingPage({ onStart, onLogin, user, language, onLanguageToggle }: { o
           </div>
           <button 
             onClick={onStart}
-            className="px-8 py-4 bg-white text-deep-blue rounded-full font-bold text-lg hover:bg-sand transition-all whitespace-nowrap"
+            className="w-full md:w-auto px-8 py-4 bg-white text-deep-blue rounded-full font-bold text-lg hover:bg-sand transition-all whitespace-nowrap"
           >
             {t.takeSurvey}
           </button>
@@ -1010,10 +1008,10 @@ function SurveyPage({ onSubmit, onBack, onCancel, isReturningUser }: { onSubmit:
       exit={{ x: -50, opacity: 0 }}
       className="flex-1 flex flex-col items-center justify-center p-6"
     >
-      <div className="w-full max-w-2xl card p-8">
+      <div className="w-full max-w-[580px] card p-4 md:p-8">
         <div className="flex justify-between items-center mb-8">
-          <h2 className="text-2xl">{t.onboardingSurvey}</h2>
-          <div className="text-sm font-bold opacity-60">{t.stepOf} {step} {t.of} 5</div>
+          <h2 className="text-xl md:text-2xl font-bold">{t.onboardingSurvey}</h2>
+          <div className="text-xs md:text-sm font-bold opacity-60">{t.stepOf} {step} {t.of} 5</div>
         </div>
         
         <div className="w-full bg-sand h-2 rounded-full mb-8 border border-black/5" role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={5} aria-label={`Step ${step} of 5`}>
@@ -1049,7 +1047,7 @@ function SurveyPage({ onSubmit, onBack, onCancel, isReturningUser }: { onSubmit:
           {step === 3 && (
             <div className="space-y-4">
               <h3 className="text-xl mb-6">{t.needHelpWith}</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 md:gap-4">
                 {[
                   { id: 'food', label: t.needFood, icon: Apple },
                   { id: 'housing', label: t.needHousing, icon: Home },
@@ -1135,23 +1133,23 @@ function SurveyPage({ onSubmit, onBack, onCancel, isReturningUser }: { onSubmit:
           )}
         </div>
 
-        <div className="flex justify-between mt-12">
-          <div>
-            {step > 1 && (
-              <button onClick={handlePrev} className="px-6 py-2 font-bold opacity-60 hover:opacity-100 flex items-center gap-2">
-                <ChevronLeft size={18} /> {t.back}
-              </button>
-            )}
-            {step === 1 && !isReturningUser && (
-              <button onClick={handlePrev} className="px-6 py-2 font-bold opacity-60 hover:opacity-100">
-                {t.back}
-              </button>
-            )}
+          <div className="flex flex-col md:flex-row justify-between mt-12 gap-4">
+            <div className="order-2 md:order-1">
+              {step > 1 && (
+                <button onClick={handlePrev} className="w-full md:w-auto px-6 py-4 md:py-2 font-bold opacity-60 hover:opacity-100 flex items-center justify-center md:justify-start gap-2 border md:border-0 rounded-xl md:rounded-none">
+                  <ChevronLeft size={18} /> <span className="md:inline">{t.back}</span>
+                </button>
+              )}
+              {step === 1 && !isReturningUser && (
+                <button onClick={handlePrev} className="w-full md:w-auto px-6 py-4 md:py-2 font-bold opacity-60 hover:opacity-100 border md:border-0 rounded-xl md:rounded-none">
+                  {t.back}
+                </button>
+              )}
+            </div>
+            <button onClick={handleNext} className="btn-primary w-full md:w-auto order-1 md:order-2 py-5 md:py-2">
+              {step === 5 ? t.generatePlan : t.next}
+            </button>
           </div>
-          <button onClick={handleNext} className="btn-primary">
-            {step === 5 ? t.generatePlan : t.next}
-          </button>
-        </div>
 
         {isReturningUser && onCancel && (
           <div className="mt-8 pt-4 border-t flex">
@@ -1323,20 +1321,40 @@ function LoadingScreen({ language }: { language: string }) {
   }, []);
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6 bg-deep-blue text-white">
+    <div className="flex-1 flex flex-col items-center justify-center p-6 bg-deep-blue text-white text-center">
       <div className="mb-8 animate-spin-slow">
-        <BrandLogo size="xl" light showText={false} />
+        <div className="md:hidden">
+          <BrandLogo size="md" light showText={false} />
+        </div>
+        <div className="hidden md:block">
+          <BrandLogo size="xl" light showText={false} />
+        </div>
       </div>
-      <h2 className="text-3xl mb-8">{t.loadingTitle}</h2>
+      <h2 className="text-xl md:text-3xl mb-8 font-bold">{t.loadingTitle}</h2>
       
-      <div className="space-y-4 w-full max-w-xs">
+      <div className="space-y-4 w-full max-w-xs mx-auto text-left">
         {steps.map((s, i) => (
           <div key={i} className={`flex items-center gap-3 transition-opacity duration-500 ${step > i ? 'opacity-100' : 'opacity-40'}`}>
-            <div className="w-4 h-4 rounded-full bg-white"></div>
-            <span>{s}</span>
+            <div className="w-3 h-3 md:w-4 md:h-4 rounded-full bg-white flex-shrink-0"></div>
+            <span className="text-[13px] md:text-base leading-tight">{s}</span>
           </div>
         ))}
       </div>
+
+      {step > 2 && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-12 w-full max-w-xs"
+        >
+          <button 
+            onClick={() => (window as any).skipLoading?.()}
+            className="w-full py-4 border-2 border-white/20 rounded-full font-bold text-sm hover:bg-white/10 transition-all"
+          >
+            {t.skip || 'Skip to Dashboard'}
+          </button>
+        </motion.div>
+      )}
     </div>
   );
 }
@@ -1734,12 +1752,29 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
 
   // Expose feedback modal to child components
   useEffect(() => {
     (window as any).openFeedbackModal = () => setShowFeedback(true);
     return () => { delete (window as any).openFeedbackModal; };
   }, []);
+
+  // Listen for Firestore quota errors
+  useEffect(() => {
+    const unsubscribe = onQuotaExceeded(() => {
+      setIsQuotaExceeded(true);
+      const hasQuotaNotif = notifications.some(n => n.title === 'Cloud Sync Limited');
+      if (!hasQuotaNotif) {
+        addNotification(
+          'system', 
+          'Cloud Sync Limited', 
+          'Your daily cloud storage limit has been reached. Changes will be saved to this device only until tomorrow.'
+        );
+      }
+    });
+    return unsubscribe;
+  }, [notifications]);
 
   const addNotification = (type: 'job' | 'resource' | 'system', title: string, message: string) => {
     const newNotification: Notification = {
@@ -1824,19 +1859,14 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
     }
 
     // Step 2: Sync to Firestore in background silently
-    try {
-      const user = auth.currentUser;
-      if (!user) return; // not logged in — localStorage only
-      
-      await setDoc(
-        doc(db, 'users', user.uid), 
-        { savedItems: saved },
-        { merge: true }
-      );
-    } catch(e) {
-      // Silent fail — localStorage already has it
-      console.log('Firebase sync skipped:', (e as Error).message);
-    }
+    const user = auth.currentUser;
+    if (!user) return; // not logged in — localStorage only
+    
+    await safeSetDoc(
+      doc(db, 'users', user.uid), 
+      { savedItems: saved },
+      { merge: true }
+    );
   };
 
   // FIX 3 — Search history saving correctly pattern
@@ -1891,18 +1921,14 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
     renderSearchHistory(history);
     
     // Sync to Firestore silently
-    try {
-      const user = auth.currentUser;
-      if (!user) return;
-      
-      await setDoc(
-        doc(db, 'users', user.uid),
-        { searchHistory: history },
-        { merge: true }
-      );
-    } catch(e) {
-      console.log('Search history sync skipped:', (e as Error).message);
-    }
+    const user = auth.currentUser;
+    if (!user) return;
+    
+    await safeSetDoc(
+      doc(db, 'users', user.uid),
+      { searchHistory: history },
+      { merge: true }
+    );
   };
 
   // Expose repeatSearch to window for onclick handlers
@@ -1942,19 +1968,18 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
   }, [profile, savedItems]);
 
   // Sync surveyData with Firestore (Debounced to save quota)
+  const lastWrittenSurveyRef = useRef<string>('');
   useEffect(() => {
     if (!user) return;
 
+    const currentDataStr = JSON.stringify(surveyData);
+    if (currentDataStr === lastWrittenSurveyRef.current) return;
+
     const timeoutId = setTimeout(() => {
       const userRef = doc(db, 'users', user.uid);
-      setDoc(userRef, { lastSurveyData: surveyData }, { merge: true }).catch(err => {
-        if (err instanceof Error && err.message.includes('resource-exhausted')) {
-          console.warn("Firestore write quota exceeded. Survey data saved locally.");
-        } else {
-          handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
-        }
-      });
-    }, 5000); // 5 second debounce for survey data
+      safeSetDoc(userRef, { lastSurveyData: surveyData }, { merge: true });
+      lastWrittenSurveyRef.current = currentDataStr;
+    }, 10000); // 10 second debounce for survey data
 
     return () => clearTimeout(timeoutId);
   }, [surveyData, user]);
@@ -1986,14 +2011,26 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
 
   return (
     <div className="flex-1 flex flex-col">
+      {isQuotaExceeded && (
+        <div className="bg-yellow-50 border-b border-yellow-100 px-4 py-2 flex items-center justify-center gap-2 text-yellow-800 text-xs font-bold no-print">
+          <AlertTriangle size={14} className="text-yellow-600" />
+          <span>Cloud sync limit reached. Your changes are saved locally and will sync tomorrow.</span>
+          <button onClick={() => setIsQuotaExceeded(false)} className="ml-2 hover:text-yellow-900">
+            <Plus size={14} className="rotate-45" />
+          </button>
+        </div>
+      )}
+      <div className="bg-deep-blue text-white py-2 px-4 text-center text-[10px] md:text-xs font-bold tracking-widest uppercase overflow-x-auto whitespace-nowrap no-scrollbar no-print">
+        {t.hotlineStrip}
+      </div>
       <nav className="sticky top-0 bg-white border-b z-50 no-print">
         <div className="max-w-5xl mx-auto px-4 flex justify-between items-center h-16">
           <button 
             onClick={() => setView('landing')} 
-            className="hover:opacity-80 transition-opacity"
+            className="hover:opacity-80 transition-opacity overflow-hidden"
             aria-label="Go to Home"
           >
-            <BrandLogo size="sm" />
+            <BrandLogo size="sm" hideSubtitleOnMobile={true} />
           </button>
           <div className="flex items-center gap-4">
             <button 
@@ -2003,13 +2040,7 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
                 setSurveyData(newData);
                 if (user) {
                   const userRef = doc(db, 'users', user.uid);
-                  setDoc(userRef, { lastSurveyData: newData }, { merge: true }).catch(err => {
-                    if (err instanceof Error && err.message.includes('resource-exhausted')) {
-                      console.warn("Firestore write quota exceeded. Language preference saved locally.");
-                    } else {
-                      handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
-                    }
-                  });
+                  safeSetDoc(userRef, { lastSurveyData: newData }, { merge: true });
                 }
               }}
               className="flex items-center gap-2 px-3 py-1.5 rounded-full border hover:bg-gray-50 transition-all text-sm font-bold text-gray-600"
@@ -2064,13 +2095,20 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
               </AnimatePresence>
             </div>
             <div className="flex items-center gap-2">
-              {user?.photoURL ? (
-                <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-teal text-white flex items-center justify-center font-bold" aria-label="User profile">
-                  {user?.displayName?.[0] || 'U'}
-                </div>
-              )}
+              <button 
+                onClick={() => setActiveTab('profile')}
+                className={`w-8 h-8 rounded-full overflow-hidden transition-all hover:ring-2 hover:ring-teal hover:ring-offset-2 ${activeTab === 'profile' ? 'ring-2 ring-teal ring-offset-2' : ''}`}
+                aria-label={t.profile}
+                title={t.profile}
+              >
+                {user?.photoURL ? (
+                  <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-full h-full bg-teal text-white flex items-center justify-center font-bold">
+                    {user?.displayName?.[0] || 'U'}
+                  </div>
+                )}
+              </button>
               <button 
                 onClick={handleLogout} 
                 className="p-2 hover:bg-gray-100 rounded-full text-gray-500"
@@ -2195,18 +2233,10 @@ function ProfilePanel({
       
       if (user) {
         const userRef = doc(db, 'users', user.uid);
-        try {
-          await setDoc(userRef, { 
-            currentPlan: generatedPlan,
-            lastSurveyData: surveyData
-          }, { merge: true });
-        } catch (err) {
-          if (err instanceof Error && err.message.includes('resource-exhausted')) {
-            console.warn("Firestore write quota exceeded. Plan saved locally.");
-          } else {
-            throw err;
-          }
-        }
+        await safeSetDoc(userRef, { 
+          currentPlan: generatedPlan,
+          lastSurveyData: surveyData
+        }, { merge: true });
       }
       alert(t.refreshPlan);
     } catch (error) {
@@ -2348,9 +2378,9 @@ function TabBtn({ id, active, onClick, label, icon: Icon }: { id: string, active
       aria-selected={isActive}
       aria-controls={`${id}-panel`}
       id={`${id}-tab`}
-      className={`px-4 py-4 font-semibold whitespace-nowrap border-b-2 transition-all flex items-center gap-2 ${isActive ? 'text-coral border-coral' : 'text-gray-500 border-transparent hover:text-deep-blue'}`}
+      className={`px-3 md:px-4 py-4 font-semibold whitespace-nowrap border-b-2 transition-all flex items-center gap-2 text-[11px] md:text-sm ${isActive ? 'text-coral border-coral' : 'text-gray-500 border-transparent hover:text-deep-blue'}`}
     >
-      {Icon && <Icon size={18} aria-hidden="true" />}
+      {Icon && <Icon size={16} className="md:w-[18px] md:h-[18px]" aria-hidden="true" />}
       {label}
     </button>
   );
@@ -2613,21 +2643,25 @@ function ResourcesPanel({ plan, urgency, savedItems, setSavedItems, language, on
         </a>
       </div>
 
-      <div className="card p-8 markdown-body shadow-inner bg-sand/20 print:shadow-none print:border-none print:bg-white">
+      <div className="card p-4 md:p-8 markdown-body shadow-inner bg-sand/20 print:shadow-none print:border-none print:bg-white max-w-[720px] mx-auto">
         {plan ? (
           <ReactMarkdown
             components={{
-              a: ({ node, ...props }) => (
-                <a 
-                  {...props} 
-                  target="_blank" 
-                  rel="noopener noreferrer" 
-                  className="inline-flex items-center gap-2 px-4 py-1.5 bg-teal text-white rounded-xl font-bold text-xs hover:opacity-90 transition-all no-underline my-1 shadow-sm"
-                >
-                  <ExternalLink size={14} />
-                  {props.children}
-                </a>
-              )
+              a: ({ node, ...props }) => {
+                const href = props.href || '';
+                const isTel = href.startsWith('tel:');
+                return (
+                  <a 
+                    {...props} 
+                    target={isTel ? undefined : "_blank"} 
+                    rel={isTel ? undefined : "noopener noreferrer"} 
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-teal text-white rounded-xl font-bold text-xs hover:opacity-90 transition-all no-underline my-1 shadow-sm min-h-[44px]"
+                  >
+                    {isTel ? <Phone size={14} /> : <ExternalLink size={14} />}
+                    {props.children}
+                  </a>
+                );
+              }
             }}
           >
             {plan}
@@ -3011,15 +3045,15 @@ function TransitPanel({ surveyData }: { surveyData: SurveyData }) {
               }
             />
             <Input label={t.to} value={to} onChange={setTo} placeholder="Destination Address" />
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <button 
                 onClick={fetchRoutes} 
                 disabled={loadingRoutes}
-                className="flex-1 bg-teal text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
+                className="w-full sm:flex-1 bg-teal text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
               >
                 {loadingRoutes ? <RefreshCw className="animate-spin" /> : <Navigation />} {t.getRoutes}
               </button>
-              <button onClick={openGoogleMaps} className="p-4 border rounded-xl hover:bg-gray-50 transition-all" title={t.openMaps}>
+              <button onClick={openGoogleMaps} className="w-full sm:w-auto p-4 border rounded-xl hover:bg-gray-50 transition-all flex items-center justify-center" title={t.openMaps}>
                 <ExternalLink />
               </button>
             </div>
@@ -3153,20 +3187,24 @@ function ChatPanel({ surveyData, saveSearchHistory }: { surveyData: SurveyData, 
         aria-relevant="additions"
       >
         {messages.map((m, i) => (
-          <div key={i} className={`chat-bubble ${m.role === 'user' ? 'chat-user' : 'chat-agent'}`}>
+          <div key={i} className={`chat-bubble ${m.role === 'user' ? 'chat-user' : 'chat-agent'} max-w-[680px] w-fit ${m.role === 'user' ? 'ml-auto' : 'mr-auto'}`}>
             <ReactMarkdown
               components={{
-                a: ({ node, ...props }) => (
-                  <a 
-                    {...props} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg font-bold text-xs transition-all no-underline my-1 shadow-sm ${m.role === 'user' ? 'bg-white text-deep-blue' : 'bg-teal text-white'}`}
-                  >
-                    <ExternalLink size={12} />
-                    {props.children}
-                  </a>
-                )
+                a: ({ node, ...props }) => {
+                  const href = props.href || '';
+                  const isTel = href.startsWith('tel:');
+                  return (
+                    <a 
+                      {...props} 
+                      target={isTel ? undefined : "_blank"} 
+                      rel={isTel ? undefined : "noopener noreferrer"} 
+                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg font-bold text-xs transition-all no-underline my-1 shadow-sm min-h-[44px] ${m.role === 'user' ? 'bg-white text-deep-blue' : 'bg-teal text-white'}`}
+                    >
+                      {isTel ? <Phone size={12} /> : <ExternalLink size={12} />}
+                      {props.children}
+                    </a>
+                  );
+                }
               }}
             >
               {m.text}
@@ -3282,18 +3320,10 @@ function MyPlanPanel({ savedItems, setSavedItems, surveyData, setSurveyData, pla
       // Save to Firestore
       if (user) {
         const userRef = doc(db, 'users', user.uid);
-        try {
-          await setDoc(userRef, { 
-            currentPlan: updatedPlan,
-            lastSurveyData: updatedSurveyData
-          }, { merge: true });
-        } catch (err) {
-          if (err instanceof Error && err.message.includes('resource-exhausted')) {
-            console.warn("Firestore write quota exceeded. Additional resources saved locally.");
-          } else {
-            throw err;
-          }
-        }
+        await safeSetDoc(userRef, { 
+          currentPlan: updatedPlan,
+          lastSurveyData: updatedSurveyData
+        }, { merge: true });
       }
 
       alert(`${newNeeds.length} new resource areas added to your plan!`);
@@ -3309,19 +3339,19 @@ function MyPlanPanel({ savedItems, setSavedItems, surveyData, setSurveyData, pla
 
   return (
     <div className="space-y-6" role="tabpanel" id="plan-panel" aria-labelledby="plan-tab">
-      <div className="flex justify-between items-center">
-        <h2 className="text-3xl">{t.plan}</h2>
-        <div className="flex gap-2">
-          <button onClick={onStartNewSearch} className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-coral text-coral font-bold hover:bg-coral/5 transition-all">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <h2 className="text-2xl md:text-3xl">{t.plan}</h2>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button onClick={onStartNewSearch} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl border-2 border-coral text-coral font-bold hover:bg-coral/5 transition-all text-sm">
             <RefreshCw size={18} /> {t.newSearch}
           </button>
-          <button onClick={() => window.print()} className="btn-primary flex items-center gap-2">
+          <button onClick={() => window.print()} className="flex-1 sm:flex-none btn-primary flex items-center justify-center gap-2 text-sm">
             <Printer size={20} /> {t.printPlan}
           </button>
         </div>
       </div>
 
-      <div className="flex gap-4 mb-8 border-b">
+      <div className="flex gap-4 mb-8 border-b overflow-x-auto no-scrollbar whitespace-nowrap">
         <SubTabBtn id="steps" active={subTab} onClick={setSubTab} label={t.actionSteps} />
         <SubTabBtn id="programs" active={subTab} onClick={setSubTab} label={t.savedPrograms} />
         <SubTabBtn id="jobs" active={subTab} onClick={setSubTab} label={t.savedJobs} />
@@ -3527,7 +3557,7 @@ function SubTabBtn({ id, active, onClick, label }: { id: string, active: string,
       aria-selected={isActive}
       aria-controls={`${id}-subpanel`}
       id={`${id}-subtab`}
-      className={`pb-2 font-bold border-b-2 transition-all ${isActive ? 'text-coral border-coral' : 'text-gray-400 border-transparent hover:text-gray-600'}`}
+      className={`pb-2 font-bold border-b-2 transition-all text-[11px] md:text-sm ${isActive ? 'text-coral border-coral' : 'text-gray-400 border-transparent hover:text-gray-600'}`}
     >
       {label}
     </button>
@@ -3545,27 +3575,23 @@ function FeedbackModal({ onClose, language, user }: { onClose: () => void, langu
     if (!feedback.trim()) return;
 
     setIsSubmitting(true);
-    try {
-      // Save feedback to Firestore
-      const feedbackRef = collection(db, 'feedback');
-      await addDoc(feedbackRef, {
-        userId: user?.uid || 'anonymous',
-        userEmail: user?.email || 'anonymous',
-        userName: user?.displayName || 'anonymous',
-        feedback,
-        timestamp: new Date().toISOString(),
-        language
-      });
+    // Save feedback to Firestore
+    const feedbackRef = collection(db, 'feedback');
+    const result = await safeAddDoc(feedbackRef, {
+      userId: user?.uid || 'anonymous',
+      userEmail: user?.email || 'anonymous',
+      userName: user?.displayName || 'anonymous',
+      feedback,
+      timestamp: new Date().toISOString(),
+      language
+    });
+    
+    if (result) {
       setIsSuccess(true);
       setTimeout(() => onClose(), 3000);
-    } catch (error) {
-      console.error("Failed to submit feedback", error);
-      if (error instanceof Error && error.message.includes('resource-exhausted')) {
-        alert("Daily feedback limit reached. Please try again tomorrow.");
-      } else {
-        alert(t.feedbackError);
-      }
-    } finally {
+    } else {
+      // If result is null, it likely failed due to quota or other handled error
+      alert("Daily feedback limit reached or connection issue. Please try again later.");
       setIsSubmitting(false);
     }
   };
