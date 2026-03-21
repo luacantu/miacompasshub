@@ -133,22 +133,22 @@ async function actionPlanAgent(eligibilityResults: string, intakeSummary: any) {
                 [211 + most urgent program]
 
                 ### 🏛️ FEDERAL PROGRAMS
-                * **[Program Name]**: [Brief Description]. [Link/Phone]
-                * **[Program Name]**: [Brief Description]. [Link/Phone]
+                * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
+                * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
 
                 ### 🌴 FLORIDA PROGRAMS
-                * **[Program Name]**: [Brief Description]. [Link/Phone]
-                * **[Program Name]**: [Brief Description]. [Link/Phone]
+                * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
+                * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
 
                 ### 🏙️ MIAMI-DADE PROGRAMS
-                * **[Program Name]**: [Brief Description]. [Link/Phone]
-                * **[Program Name]**: [Brief Description]. [Link/Phone]
+                * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
+                * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
 
                 ### 📍 NEAR YOU — [neighborhood]
-                * **[Program Name]**: [Brief Description]. [Link/Phone]
+                * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
 
                 ### 🎓 EDUCATION & TRAINING
-                * **[Program Name]**: [Brief Description]. [Link/Phone]
+                * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
 
                 ### 📋 YOUR NEXT STEPS IN ORDER
                 1. **Today**: [Action]
@@ -280,22 +280,22 @@ export async function runMIACompassAgent(type: 'survey' | 'chat' | 'jobs', data:
                     [211 + most urgent program]
 
                     ### 🏛️ FEDERAL PROGRAMS
-                    * **[Program Name]**: [Brief Description]. [Link/Phone]
-                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+                    * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
+                    * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
 
                     ### 🌴 FLORIDA PROGRAMS
-                    * **[Program Name]**: [Brief Description]. [Link/Phone]
-                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+                    * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
+                    * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
 
                     ### 🏙️ MIAMI-DADE PROGRAMS
-                    * **[Program Name]**: [Brief Description]. [Link/Phone]
-                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+                    * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
+                    * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
 
                     ### 📍 NEAR YOU — [neighborhood]
-                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+                    * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
 
                     ### 🎓 EDUCATION & TRAINING
-                    * **[Program Name]**: [Brief Description]. [Link/Phone]
+                    * **[Program Name]**: [Brief Description]. [Apply/Visit Website](url) or [Phone]
 
                     ### 📋 YOUR NEXT STEPS IN ORDER
                     1. **Today**: [Action]

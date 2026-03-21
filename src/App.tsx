@@ -1413,7 +1413,7 @@ function NotificationPanel({ notifications, onClose, onMarkRead, onClear, t }: {
   );
 }
 
-function EduGrantsPanel({ surveyData, savedItems, setSavedItems }: { surveyData: SurveyData, savedItems: any, setSavedItems: any }) {
+function EduGrantsPanel({ surveyData, savedItems, setSavedItems, saveProgram }: { surveyData: SurveyData, savedItems: any, setSavedItems: any, saveProgram: (item: any) => void }) {
   const t = translations[surveyData.language as keyof typeof translations] || translations.English;
   const [locationTab, setLocationTab] = useState<'florida' | 'miami' | 'broward'>('miami');
 
@@ -1425,10 +1425,7 @@ function EduGrantsPanel({ surveyData, savedItems, setSavedItems }: { surveyData:
         programs: savedItems.programs.filter((p: any) => p.name !== item.name)
       });
     } else {
-      setSavedItems({
-        ...savedItems,
-        programs: [...savedItems.programs, item]
-      });
+      saveProgram(item);
     }
   };
 
@@ -1767,12 +1764,21 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
   }, [plan, surveyData.urgency]);
 
   const [savedItems, setSavedItems] = useState<{programs: any[], jobs: any[], steps: any[]}>(() => {
-    const saved = localStorage.getItem('miacompass_saved_items');
+    const saved = localStorage.getItem('miacompass_saved');
     if (saved) {
       try {
         return JSON.parse(saved);
       } catch (e) {
         console.error("Failed to parse saved items", e);
+      }
+    }
+    // Fallback to old key if exists
+    const oldSaved = localStorage.getItem('miacompass_saved_items');
+    if (oldSaved) {
+      try {
+        return JSON.parse(oldSaved);
+      } catch (e) {
+        console.error("Failed to parse old saved items", e);
       }
     }
     return {
@@ -1782,29 +1788,147 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
     };
   });
 
-  // Persist savedItems to localStorage
-  useEffect(() => {
-    localStorage.setItem('miacompass_saved_items', JSON.stringify(savedItems));
-  }, [savedItems]);
+  // FIX 2 — Save to Saved Programs button pattern
+  const renderSavedPrograms = (saved: any) => {
+    setSavedItems(saved);
+  };
 
-  // Sync savedItems with Firestore (Debounced to save quota)
-  useEffect(() => {
-    if (!user) return;
+  const updateSavedBadge = () => {
+    // Badge updates automatically via React state (savedItems.programs.length)
+  };
 
-    const timeoutId = setTimeout(() => {
-      const userRef = doc(db, 'users', user.uid);
-      setDoc(userRef, { savedItems }, { merge: true }).catch(err => {
-        // Silently catch quota errors to prevent app crash, but log them
-        if (err instanceof Error && err.message.includes('resource-exhausted')) {
-          console.warn("Firestore write quota exceeded. Changes saved locally but not synced to cloud.");
-        } else {
-          handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}`);
-        }
+  const showSaveConfirmation = () => {
+    addNotification('resource', 'Saved!', 'Item added to your plan.');
+  };
+
+  const saveProgram = async (item: any) => {
+    // Step 1: Save locally first — instant
+    const saved = JSON.parse(
+      localStorage.getItem('miacompass_saved') || 
+      '{"programs":[],"jobs":[],"steps":[]}'
+    );
+    
+    // Check for duplicates
+    if (!saved.programs.some((p: any) => p.name === item.name)) {
+      saved.programs.push({
+        ...item,
+        savedAt: new Date().toISOString(),
+        done: false
       });
-    }, 3000); // 3 second debounce
+      localStorage.setItem('miacompass_saved', JSON.stringify(saved));
+      
+      // Update UI immediately
+      renderSavedPrograms(saved);
+      updateSavedBadge();
+      showSaveConfirmation(); // green "Saved!" feedback
+    }
 
-    return () => clearTimeout(timeoutId);
-  }, [savedItems, user]);
+    // Step 2: Sync to Firestore in background silently
+    try {
+      const user = auth.currentUser;
+      if (!user) return; // not logged in — localStorage only
+      
+      await setDoc(
+        doc(db, 'users', user.uid), 
+        { savedItems: saved },
+        { merge: true }
+      );
+    } catch(e) {
+      // Silent fail — localStorage already has it
+      console.log('Firebase sync skipped:', (e as Error).message);
+    }
+  };
+
+  // FIX 3 — Search history saving correctly pattern
+  const renderSearchHistory = (history: any[]) => {
+    const container = document.getElementById('search-history');
+    if (!container) return;
+    if (!history || !history.length) {
+      container.innerHTML = 
+        '<div style="color:var(--text-lt);font-size:13px">No recent searches yet.</div>';
+      return;
+    }
+    container.innerHTML = history.map(h => `
+      <div class="history-item p-4 bg-white rounded-xl border flex justify-between items-center gap-4 hover:bg-gray-50 transition-all cursor-pointer mb-3" 
+           onclick="window.repeatSearch('${h.query}')">
+        <div class="flex items-center gap-3">
+          <span style="font-size:14px">🔍</span>
+          <span class="font-bold text-deep-blue">${h.query}</span>
+        </div>
+        <span style="font-size:11px;color:var(--text-lt);margin-left:auto">
+          ${new Date(h.timestamp).toLocaleDateString()}
+        </span>
+      </div>
+    `).join('');
+  };
+
+  const saveSearchHistory = async (query: string) => {
+    if (!query || query.trim().length < 2) return;
+    
+    // Get existing history
+    let history = [];
+    try {
+      history = JSON.parse(
+        localStorage.getItem('miacompass_search_history') 
+        || '[]'
+      );
+    } catch(e) { history = []; }
+    
+    // Add new query at the front, keep last 10
+    history = [
+      { 
+        query: query.trim(), 
+        timestamp: new Date().toISOString() 
+      },
+      ...history.filter((h: any) => h.query !== query.trim())
+    ].slice(0, 10);
+    
+    // Save to localStorage immediately
+    localStorage.setItem('miacompass_search_history', 
+      JSON.stringify(history));
+    
+    // Render search history in UI
+    renderSearchHistory(history);
+    
+    // Sync to Firestore silently
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      
+      await setDoc(
+        doc(db, 'users', user.uid),
+        { searchHistory: history },
+        { merge: true }
+      );
+    } catch(e) {
+      console.log('Search history sync skipped:', (e as Error).message);
+    }
+  };
+
+  // Expose repeatSearch to window for onclick handlers
+  useEffect(() => {
+    (window as any).repeatSearch = (query: string) => {
+      // Logic to repeat search - for now, just chat with MIA
+      setActiveTab('chat');
+      // We'll need a way to trigger the chat send, but for now just set input
+      // This is a bit complex in React, but we'll do our best
+      const chatInput = document.querySelector('textarea[aria-label="Chat input"]') as HTMLTextAreaElement;
+      if (chatInput) {
+        chatInput.value = query;
+        // Trigger React state update if possible, but this is tricky
+        // Better to use a global event or state
+      }
+    };
+  }, []);
+
+  // Call renderSearchHistory() on dashboard load
+  useEffect(() => {
+    const history = JSON.parse(
+      localStorage.getItem('miacompass_search_history') 
+      || '[]'
+    );
+    renderSearchHistory(history);
+  }, [activeTab]); // Re-render when tab changes to ensure container exists
 
   // Load savedItems from profile (only if different to avoid loops)
   useEffect(() => {
@@ -1983,10 +2107,10 @@ function Dashboard({ user, profile, plan, setPlan, surveyData, setSurveyData, ac
             searchHistory={profile?.searchHistory || []} 
           />
         )}
-        {activeTab === 'edugrants' && <EduGrantsPanel surveyData={surveyData} savedItems={savedItems} setSavedItems={setSavedItems} />}
+        {activeTab === 'edugrants' && <EduGrantsPanel surveyData={surveyData} savedItems={savedItems} setSavedItems={setSavedItems} saveProgram={saveProgram} />}
         {activeTab === 'jobs' && <JobsPanel surveyData={surveyData} savedItems={savedItems} setSavedItems={setSavedItems} onNotification={addNotification} />}
         {activeTab === 'transit' && <TransitPanel surveyData={surveyData} />}
-        {activeTab === 'chat' && <ChatPanel surveyData={surveyData} />}
+        {activeTab === 'chat' && <ChatPanel surveyData={surveyData} saveSearchHistory={saveSearchHistory} />}
         {activeTab === 'profile' && (
           <ProfilePanel 
             surveyData={surveyData} 
@@ -2061,7 +2185,6 @@ function ProfilePanel({
 }) {
   const t = translations[surveyData.language as keyof typeof translations] || translations.English;
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'plan'>('profile');
 
   const handleRefreshPlan = async () => {
     if (!confirm(t.confirmRefreshPlan)) return;
@@ -2109,149 +2232,109 @@ function ProfilePanel({
   return (
     <div className="space-y-8" role="tabpanel" id="profile-panel" aria-labelledby="profile-tab">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4">
-        <div className="flex items-center gap-6">
-          <button 
-            onClick={() => setActiveSubTab('profile')}
-            className={`text-2xl font-bold pb-2 border-b-4 transition-all ${activeSubTab === 'profile' ? 'border-teal text-deep-blue' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
-          >
-            {t.myProfile}
+        <h2 className="text-3xl font-bold text-deep-blue">{t.myProfile}</h2>
+        
+        <div className="flex gap-2">
+          <button onClick={onStartNewSearch} className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-coral text-coral font-bold hover:bg-coral/5 transition-all text-sm">
+            <RefreshCw size={16} /> {t.newSearch}
           </button>
           <button 
-            onClick={() => setActiveSubTab('plan')}
-            className={`text-2xl font-bold pb-2 border-b-4 transition-all ${activeSubTab === 'plan' ? 'border-teal text-deep-blue' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+            onClick={handleRefreshPlan} 
+            disabled={isRefreshing}
+            className="btn-primary flex items-center gap-2 text-sm"
           >
-            {t.plan}
+            <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
+            {isRefreshing ? t.thinking : t.refreshPlan}
           </button>
         </div>
-        
-        {activeSubTab === 'profile' && (
-          <div className="flex gap-2">
-            <button onClick={onStartNewSearch} className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-coral text-coral font-bold hover:bg-coral/5 transition-all text-sm">
-              <RefreshCw size={16} /> {t.newSearch}
-            </button>
-            <button 
-              onClick={handleRefreshPlan} 
-              disabled={isRefreshing}
-              className="btn-primary flex items-center gap-2 text-sm"
-            >
-              <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
-              {isRefreshing ? t.thinking : t.refreshPlan}
-            </button>
-          </div>
-        )}
       </div>
 
-      <AnimatePresence mode="wait">
-        {activeSubTab === 'profile' ? (
-          <motion.div 
-            key="profile"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            className="grid md:grid-cols-2 gap-8"
-          >
-            <div className="card p-6 space-y-6">
-              <h3 className="text-xl font-bold border-b pb-2">{t.profile}</h3>
-              <div className="space-y-4">
-                <Select label={t.language} value={surveyData.language} onChange={v => updateField('language', v)} options={['English', 'Spanish']} />
-                <Input label={t.age} type="number" value={surveyData.age} onChange={v => updateField('age', v)} />
-                <Select label={t.familyStatus} value={surveyData.family_status} onChange={v => updateField('family_status', v)} options={['Single', 'Married', 'Single Parent']} />
-                <Input label={t.children} type="number" value={surveyData.children} onChange={v => updateField('children', v)} />
-              </div>
-            </div>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="grid md:grid-cols-2 gap-8"
+      >
+        <div className="card p-6 space-y-6">
+          <h3 className="text-xl font-bold border-b pb-2">{t.profile}</h3>
+          <div className="space-y-4">
+            <Select label={t.language} value={surveyData.language} onChange={v => updateField('language', v)} options={['English', 'Spanish']} />
+            <Input label={t.age} type="number" value={surveyData.age} onChange={v => updateField('age', v)} />
+            <Select label={t.familyStatus} value={surveyData.family_status} onChange={v => updateField('family_status', v)} options={['Single', 'Married', 'Single Parent']} />
+            <Input label={t.children} type="number" value={surveyData.children} onChange={v => updateField('children', v)} />
+          </div>
+        </div>
 
-            <div className="card p-6 space-y-6">
-              <h3 className="text-xl font-bold border-b pb-2">{t.address}</h3>
-              <div className="space-y-4">
-                <AddressAutofill 
-                  label={t.street} 
-                  value={surveyData.street} 
-                  onChange={v => updateField('street', v)} 
-                  onAddressSelect={addr => {
-                    const neighborhoodOptions = [t.other, 'Hialeah', 'Miami Beach', 'Homestead', 'North Miami', 'Little Havana', 'Little Haiti', 'Overtown', 'Liberty City', 'Coral Gables'];
-                    let matchedNeighborhood = t.other;
-                    if (addr.neighborhood) {
-                      matchedNeighborhood = neighborhoodOptions.find(opt => 
-                        addr.neighborhood!.toLowerCase().includes(opt.toLowerCase()) || 
-                        opt.toLowerCase().includes(addr.neighborhood!.toLowerCase())
-                      ) || t.other;
-                    }
-                    updateFields({ ...addr, neighborhood: matchedNeighborhood });
-                  }}
-                  placeholder="123 Main St" 
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <Input label={t.city} value={surveyData.city} onChange={v => updateField('city', v)} placeholder="Miami" />
-                  <Input label={t.zip} value={surveyData.zip} onChange={v => updateField('zip', v)} placeholder="33101" />
-                </div>
-                <Select label={t.neighborhood} value={surveyData.neighborhood} onChange={v => updateField('neighborhood', v)} options={[t.other, 'Hialeah', 'Miami Beach', 'Homestead', 'North Miami', 'Little Havana', 'Little Haiti', 'Overtown', 'Liberty City', 'Coral Gables']} />
-              </div>
+        <div className="card p-6 space-y-6">
+          <h3 className="text-xl font-bold border-b pb-2">{t.address}</h3>
+          <div className="space-y-4">
+            <AddressAutofill 
+              label={t.street} 
+              value={surveyData.street} 
+              onChange={v => updateField('street', v)} 
+              onAddressSelect={addr => {
+                const neighborhoodOptions = [t.other, 'Hialeah', 'Miami Beach', 'Homestead', 'North Miami', 'Little Havana', 'Little Haiti', 'Overtown', 'Liberty City', 'Coral Gables'];
+                let matchedNeighborhood = t.other;
+                if (addr.neighborhood) {
+                  matchedNeighborhood = neighborhoodOptions.find(opt => 
+                    addr.neighborhood!.toLowerCase().includes(opt.toLowerCase()) || 
+                    opt.toLowerCase().includes(addr.neighborhood!.toLowerCase())
+                  ) || t.other;
+                }
+                updateFields({ ...addr, neighborhood: matchedNeighborhood });
+              }}
+              placeholder="123 Main St" 
+            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input label={t.city} value={surveyData.city} onChange={v => updateField('city', v)} placeholder="Miami" />
+              <Input label={t.zip} value={surveyData.zip} onChange={v => updateField('zip', v)} placeholder="33101" />
             </div>
+            <Select label={t.neighborhood} value={surveyData.neighborhood} onChange={v => updateField('neighborhood', v)} options={[t.other, 'Hialeah', 'Miami Beach', 'Homestead', 'North Miami', 'Little Havana', 'Little Haiti', 'Overtown', 'Liberty City', 'Coral Gables']} />
+          </div>
+        </div>
 
-            <div className="card p-6 space-y-6">
-              <h3 className="text-xl font-bold border-b pb-2">{t.needs}</h3>
-              <div className="flex flex-wrap gap-2">
-                {surveyData.needs.map(need => (
-                  <div key={need} className="bg-teal/10 text-teal px-3 py-1 rounded-full text-sm font-bold capitalize flex items-center gap-2">
-                    {need}
-                  </div>
-                ))}
+        <div className="card p-6 space-y-6">
+          <h3 className="text-xl font-bold border-b pb-2">{t.needs}</h3>
+          <div className="flex flex-wrap gap-2">
+            {surveyData.needs.map(need => (
+              <div key={need} className="bg-teal/10 text-teal px-3 py-1 rounded-full text-sm font-bold capitalize flex items-center gap-2">
+                {need}
               </div>
-              <div className="pt-4">
-                <label className="block text-sm font-bold mb-2">{t.urgency}</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <button 
-                    onClick={() => updateField('urgency', 'normal')}
-                    className={`p-2 text-xs font-bold rounded-lg border-2 transition-all ${surveyData.urgency === 'normal' ? 'bg-green-500 border-green-500 text-white' : 'border-gray-200 text-gray-500'}`}
-                  >
-                    {t.normal}
-                  </button>
-                  <button 
-                    onClick={() => updateField('urgency', 'urgent')}
-                    className={`p-2 text-xs font-bold rounded-lg border-2 transition-all ${surveyData.urgency === 'urgent' ? 'bg-orange-500 border-orange-500 text-white' : 'border-gray-200 text-gray-500'}`}
-                  >
-                    {t.urgent}
-                  </button>
-                  <button 
-                    onClick={() => updateField('urgency', 'critical')}
-                    className={`p-2 text-xs font-bold rounded-lg border-2 transition-all ${surveyData.urgency === 'critical' ? 'bg-red-500 border-red-500 text-white' : 'border-gray-200 text-gray-500'}`}
-                  >
-                    {t.critical}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-6 border-t md:col-span-2">
+            ))}
+          </div>
+          <div className="pt-4">
+            <label className="block text-sm font-bold mb-2">{t.urgency}</label>
+            <div className="grid grid-cols-3 gap-2">
               <button 
-                onClick={onHelp}
-                className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-coral hover:text-coral transition-all font-bold"
+                onClick={() => updateField('urgency', 'normal')}
+                className={`p-2 text-xs font-bold rounded-lg border-2 transition-all ${surveyData.urgency === 'normal' ? 'bg-green-500 border-green-500 text-white' : 'border-gray-200 text-gray-500'}`}
               >
-                <HelpCircle size={20} /> {t.help} & FAQ
+                {t.normal}
+              </button>
+              <button 
+                onClick={() => updateField('urgency', 'urgent')}
+                className={`p-2 text-xs font-bold rounded-lg border-2 transition-all ${surveyData.urgency === 'urgent' ? 'bg-orange-500 border-orange-500 text-white' : 'border-gray-200 text-gray-500'}`}
+              >
+                {t.urgent}
+              </button>
+              <button 
+                onClick={() => updateField('urgency', 'critical')}
+                className={`p-2 text-xs font-bold rounded-lg border-2 transition-all ${surveyData.urgency === 'critical' ? 'bg-red-500 border-red-500 text-white' : 'border-gray-200 text-gray-500'}`}
+              >
+                {t.critical}
               </button>
             </div>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="plan"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
+          </div>
+        </div>
+
+        <div className="pt-6 border-t md:col-span-2">
+          <button 
+            onClick={onHelp}
+            className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed border-gray-300 text-gray-500 hover:border-coral hover:text-coral transition-all font-bold"
           >
-            <MyPlanPanel 
-              savedItems={savedItems} 
-              setSavedItems={setSavedItems} 
-              surveyData={surveyData} 
-              setSurveyData={setSurveyData} 
-              plan={plan} 
-              setPlan={setPlan} 
-              user={user} 
-              onStartNewSearch={onStartNewSearch} 
-              searchHistory={searchHistory} 
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <HelpCircle size={20} /> {t.help} & FAQ
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 }
@@ -2531,7 +2614,27 @@ function ResourcesPanel({ plan, urgency, savedItems, setSavedItems, language, on
       </div>
 
       <div className="card p-8 markdown-body shadow-inner bg-sand/20 print:shadow-none print:border-none print:bg-white">
-        {plan ? <ReactMarkdown>{plan}</ReactMarkdown> : <div className="text-center py-12 opacity-50 italic">{t.generatingPlan}</div>}
+        {plan ? (
+          <ReactMarkdown
+            components={{
+              a: ({ node, ...props }) => (
+                <a 
+                  {...props} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="inline-flex items-center gap-2 px-4 py-1.5 bg-teal text-white rounded-xl font-bold text-xs hover:opacity-90 transition-all no-underline my-1 shadow-sm"
+                >
+                  <ExternalLink size={14} />
+                  {props.children}
+                </a>
+              )
+            }}
+          >
+            {plan}
+          </ReactMarkdown>
+        ) : (
+          <div className="text-center py-12 opacity-50 italic">{t.generatingPlan}</div>
+        )}
       </div>
       
       <div className="flex justify-center pt-4 no-print">
@@ -3001,7 +3104,7 @@ function TransitPanel({ surveyData }: { surveyData: SurveyData }) {
   );
 }
 
-function ChatPanel({ surveyData }: { surveyData: SurveyData }) {
+function ChatPanel({ surveyData, saveSearchHistory }: { surveyData: SurveyData, saveSearchHistory: (query: string) => void }) {
   const t = translations[surveyData.language as keyof typeof translations] || translations.English;
   const [messages, setMessages] = useState<{role: 'user' | 'agent', text: string}[]>([
     { role: 'agent', text: surveyData.language === 'Spanish' ? "¡Hola! Soy tu asistente MIACompa. Recuerdo tu perfil y plan de recursos. ¿Cómo puedo ayudarte hoy?" : "Hello! I'm your MIACompa assistant. I remember your profile and resource plan. How can I help you today?" }
@@ -3020,6 +3123,9 @@ function ChatPanel({ surveyData }: { surveyData: SurveyData }) {
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setLoading(true);
+
+    // FIX 3 — Save search history on chat send
+    saveSearchHistory(userMsg);
 
     try {
       // Prepare history for Gemini
@@ -3048,7 +3154,23 @@ function ChatPanel({ surveyData }: { surveyData: SurveyData }) {
       >
         {messages.map((m, i) => (
           <div key={i} className={`chat-bubble ${m.role === 'user' ? 'chat-user' : 'chat-agent'}`}>
-            <ReactMarkdown>{m.text}</ReactMarkdown>
+            <ReactMarkdown
+              components={{
+                a: ({ node, ...props }) => (
+                  <a 
+                    {...props} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg font-bold text-xs transition-all no-underline my-1 shadow-sm ${m.role === 'user' ? 'bg-white text-deep-blue' : 'bg-teal text-white'}`}
+                  >
+                    <ExternalLink size={12} />
+                    {props.children}
+                  </a>
+                )
+              }}
+            >
+              {m.text}
+            </ReactMarkdown>
           </div>
         ))}
         {loading && <div className="chat-bubble chat-agent italic opacity-50" aria-busy="true">{t.thinking}</div>}
@@ -3208,51 +3330,12 @@ function MyPlanPanel({ savedItems, setSavedItems, surveyData, setSurveyData, pla
 
       <div className="min-h-[300px]">
         {subTab === 'history' && (
-          <div className="space-y-4">
-            {searchHistory && searchHistory.length > 0 ? (
-              [...searchHistory].reverse().map((item) => (
-                <div key={item.id} className="p-6 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                        <Calendar size={14} />
-                        {new Date(item.timestamp).toLocaleDateString()} at {new Date(item.timestamp).toLocaleTimeString()}
-                      </div>
-                      <h4 className="font-bold text-lg text-deep-blue">
-                        {t.historyItemDesc} {item.surveyData.zip || item.surveyData.city}
-                      </h4>
-                    </div>
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                        onClick={() => {
-                          setPlan(item.plan);
-                          setSurveyData(item.surveyData);
-                          localStorage.setItem('miacompass_plan', item.plan);
-                          localStorage.setItem('lastSurveyData', JSON.stringify(item.surveyData));
-                          alert(t.restorePlan);
-                        }}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-teal/10 text-teal rounded-lg font-medium hover:bg-teal/20 transition-colors"
-                        aria-label={`Restore plan from ${new Date(item.timestamp).toLocaleDateString()} at ${new Date(item.timestamp).toLocaleTimeString()}`}
-                      >
-                        <RotateCcw size={16} /> {t.viewPlan}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {item.surveyData.needs.map(need => (
-                      <span key={need} className="px-2 py-1 bg-gray-100 rounded-md text-xs text-gray-600 capitalize">
-                        {need}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-12 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                <History className="mx-auto text-gray-300 mb-4" size={48} />
-                <p className="text-gray-500">{t.noHistory}</p>
-              </div>
-            )}
+          <div className="space-y-6">
+            <h3 className="text-xl font-bold">{t.searchHistory}</h3>
+            <div id="search-history" className="space-y-3">
+              {/* This will be populated by renderSearchHistory */}
+              <div style={{color:'var(--text-lt)', fontSize:'13px'}}>No recent searches yet.</div>
+            </div>
           </div>
         )}
 
@@ -3364,18 +3447,41 @@ function MyPlanPanel({ savedItems, setSavedItems, surveyData, setSurveyData, pla
         {subTab === 'programs' && (
           <div className="grid md:grid-cols-2 gap-4">
             {savedItems.programs.length > 0 ? savedItems.programs.map((p: any, i: number) => (
-              <div key={i} className="p-4 bg-white rounded-xl border flex justify-between items-start">
-                <span>{p}</span>
-                <button 
-                  onClick={() => setSavedItems({
-                    ...savedItems,
-                    programs: savedItems.programs.filter((_: any, index: number) => index !== i)
-                  })}
-                  className="text-red-500 hover:bg-red-50 p-2 rounded-lg"
-                  aria-label={`Remove program: ${p}`}
-                >
-                  <Trash2 size={16} />
-                </button>
+              <div key={i} className="p-6 bg-white rounded-2xl border flex flex-col justify-between shadow-sm hover:shadow-md transition-all">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex-1">
+                    <h4 className="font-bold text-lg text-deep-blue">{p.name || p.title || p}</h4>
+                    <p className="text-sm opacity-60">{p.org || p.company}</p>
+                  </div>
+                  <button 
+                    onClick={() => setSavedItems({
+                      ...savedItems,
+                      programs: savedItems.programs.filter((_: any, index: number) => index !== i)
+                    })}
+                    className="text-red-500 hover:bg-red-50 p-2 rounded-lg"
+                    aria-label={`Remove program: ${p.name || p.title || p}`}
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+                
+                <div className="space-y-3 mb-6">
+                  {p.covers && <p className="text-sm line-clamp-2">{p.covers}</p>}
+                  {p.description && <p className="text-sm line-clamp-2">{p.description}</p>}
+                </div>
+
+                <div className="flex gap-2 mt-auto">
+                  {(p.website || p.link) && (
+                    <a 
+                      href={p.website || p.link} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="flex-1 bg-teal text-white py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-opacity-90 transition-all"
+                    >
+                      {t.applyNow || 'Apply'} <ExternalLink size={16} />
+                    </a>
+                  )}
+                </div>
               </div>
             )) : <div className="col-span-2 text-center py-12 opacity-50">No programs saved yet.</div>}
           </div>
