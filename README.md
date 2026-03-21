@@ -136,30 +136,6 @@ git clone https://github.com/luacantu/miacompasshub.git
 cd miacompasshub
 ```
 
-**2. Install dependencies**
-```bash
-pip install google-adk flask flask-cors
-```
-
-**3. Set your API key**
-```bash
-# Create .env file
-echo "GEMINI_API_KEY=your_key_here" > .env
-```
-Get a free key at: https://aistudio.google.com/apikey
-
-**4. Run**
-```bash
-python main.py
-```
-
-**5. Open**
-```
-http://localhost:5000
-```
-
----
-
 ## 🏆 Built At
 
 **DeepStation Google Hackathon 2026**
