@@ -33,6 +33,8 @@ import {
   Calendar,
   CheckCircle2,
   HelpCircle,
+  Share,
+  Download,
   User as UserIcon,
   Compass,
   AlertCircle,
@@ -75,6 +77,10 @@ const translations = {
     profile: "My Profile",
     newSearch: "New Search",
     printPlan: "Print Plan",
+    sharePlan: "Share Plan",
+    shareSubject: "My MIACompass Resource Plan",
+    shareText: "Check out my personalized resource plan from MIACompass!",
+    downloadPlan: "Download",
     resourcePlan: "Your Resource Plan",
     copyPlan: "Copy Plan",
     saveSteps: "Save Steps to My Plan",
@@ -267,6 +273,10 @@ const translations = {
     profile: "Mi Perfil",
     newSearch: "Nueva Búsqueda",
     printPlan: "Imprimir Plan",
+    sharePlan: "Compartir Plan",
+    shareSubject: "Mi Plan de Recursos de MIACompass",
+    shareText: "¡Mira mi plan de recursos personalizado de MIACompass!",
+    downloadPlan: "Descargar",
     resourcePlan: "Tu Plan de Recursos",
     copyPlan: "Copiar Plan",
     saveSteps: "Guardar Pasos en Mi Plan",
@@ -501,6 +511,75 @@ interface SurveyData {
 
 // --- Components ---
 
+// Error Boundary Component
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, errorInfo: string | null}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, errorInfo: error.message || String(error) };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      let isPermissionError = false;
+      try {
+        const parsed = JSON.parse(this.state.errorInfo || '{}');
+        if (parsed.error?.includes('permissions')) isPermissionError = true;
+      } catch (e) {}
+
+      return (
+        <div className="min-h-screen bg-sand flex items-center justify-center p-6 text-center">
+          <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border-2 border-coral/20">
+            <div className="w-20 h-20 bg-coral/10 text-coral rounded-full flex items-center justify-center mx-auto mb-6">
+              <AlertTriangle size={40} />
+            </div>
+            <h2 className="text-2xl font-bold text-deep-blue mb-4">Something went wrong</h2>
+            <p className="text-gray-600 mb-8">
+              {isPermissionError 
+                ? "There was a problem accessing your data. Please try logging out and back in."
+                : "The application encountered an unexpected error."}
+            </p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => window.location.reload()}
+                className="w-full py-3 bg-teal text-white rounded-xl font-bold shadow-md hover:opacity-90 transition-all"
+              >
+                Refresh Page
+              </button>
+              <button 
+                onClick={() => {
+                  auth.signOut();
+                  window.location.reload();
+                }}
+                className="w-full py-3 border-2 border-coral text-coral rounded-xl font-bold hover:bg-coral/5 transition-all"
+              >
+                Log Out & Reset
+              </button>
+            </div>
+            {process.env.NODE_ENV === 'development' && (
+              <details className="mt-8 text-left">
+                <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600">Error Details</summary>
+                <pre className="mt-2 p-4 bg-gray-100 rounded-lg text-[10px] overflow-auto max-h-40 text-gray-500">
+                  {this.state.errorInfo}
+                </pre>
+              </details>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -550,31 +629,46 @@ export default function App() {
   }, [surveyData]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubProfile: (() => void) | null = null;
+
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      // Cleanup previous profile listener if it exists
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       setUser(firebaseUser);
+      
       if (firebaseUser) {
         const userRef = doc(db, 'users', firebaseUser.uid);
         
         // Use onSnapshot for real-time updates
-        const unsubProfile = onSnapshot(userRef, (doc) => {
+        unsubProfile = onSnapshot(userRef, (doc) => {
           if (doc.exists()) {
             const data = doc.data() as UserProfile;
             setProfile(data);
           }
           setLoading(false);
         }, (err) => {
-          handleFirestoreError(err, OperationType.GET, `users/${firebaseUser.uid}`);
+          // Only log if we still have a user (prevents errors on logout)
+          if (auth.currentUser) {
+            console.error("Profile sync error:", err);
+            // We don't throw here to avoid crashing the app, just log
+          }
           setLoading(false);
         });
-
-        return () => unsubProfile();
       } else {
         setProfile(null);
-        setView('landing');
+        if (view !== 'landing') setView('landing');
         setLoading(false);
       }
     });
-    return unsubscribe;
+
+    return () => {
+      unsubscribe();
+      if (unsubProfile) unsubProfile();
+    };
   }, []);
 
   const handleLogin = async () => {
@@ -650,20 +744,23 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-deep-blue text-white">
-        <div className="text-center">
-          <div className="mb-8 loading-compass">
-            <BrandLogo size="xl" light showText={false} />
+      <ErrorBoundary>
+        <div className="min-h-screen flex items-center justify-center bg-deep-blue text-white">
+          <div className="text-center">
+            <div className="mb-8 loading-compass">
+              <BrandLogo size="xl" light showText={false} />
+            </div>
+            <h2 className="text-3xl">Loading MIACompa...</h2>
           </div>
-          <h2 className="text-3xl">Loading MIACompa...</h2>
         </div>
-      </div>
+      </ErrorBoundary>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col" role="main">
-      <AnimatePresence mode="wait">
+    <ErrorBoundary>
+      <div className="min-h-screen flex flex-col" role="main">
+        <AnimatePresence mode="wait">
         {view === 'landing' && (
           <LandingPage 
             onStart={handleStartSurvey} 
@@ -702,6 +799,7 @@ export default function App() {
         )}
       </AnimatePresence>
     </div>
+    </ErrorBoundary>
   );
 }
 
@@ -2128,14 +2226,99 @@ function ResourcesPanel({ plan, urgency, savedItems, setSavedItems, language, on
   const [isCopied, setIsCopied] = useState(false);
 
   const handleCopy = () => {
-    if (!plan) return;
-    navigator.clipboard.writeText(plan);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
+    if (!plan) {
+      console.warn("No plan to copy");
+      return;
+    }
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(plan).then(() => {
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+      }).catch(err => {
+        console.error("Clipboard API failed, using fallback:", err);
+        copyToClipboardFallback(plan);
+      });
+    } else {
+      copyToClipboardFallback(plan);
+    }
+  };
+
+  const copyToClipboardFallback = (text: string) => {
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      // Ensure it's not visible but part of the DOM
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "0";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      if (successful) {
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2000);
+      }
+    } catch (err) {
+      console.error('Fallback copy failed:', err);
+    }
   };
 
   const handlePrint = () => {
+    console.log("Printing plan...");
     window.print();
+  };
+
+  const handleShare = async () => {
+    if (!plan) {
+      console.warn("No plan to share");
+      return;
+    }
+    
+    console.log("Sharing plan...");
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: t.shareSubject,
+          text: t.shareText,
+          url: window.location.href,
+        });
+        return;
+      } catch (err) {
+        console.error("Native share failed:", err);
+        // Fall through to fallback
+      }
+    }
+    
+    // Fallback: Open email client
+    try {
+      const mailtoLink = `mailto:?subject=${encodeURIComponent(t.shareSubject)}&body=${encodeURIComponent(t.shareText + "\n\n" + plan)}`;
+      window.location.href = mailtoLink;
+    } catch (err) {
+      console.error("Email share failed:", err);
+    }
+  };
+
+  const handleDownload = () => {
+    if (!plan) {
+      console.warn("No plan to download");
+      return;
+    }
+    
+    console.log("Downloading plan...");
+    try {
+      const element = document.createElement("a");
+      const file = new Blob([plan], {type: 'text/plain'});
+      element.href = URL.createObjectURL(file);
+      element.download = "MIACompass_Resource_Plan.txt";
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+    } catch (err) {
+      console.error("Download failed:", err);
+    }
   };
 
   const handleSaveSteps = () => {
@@ -2253,6 +2436,12 @@ function ResourcesPanel({ plan, urgency, savedItems, setSavedItems, language, on
           </button>
           <button onClick={handlePrint} className="p-2 hover:bg-white rounded-xl border flex items-center gap-2 text-xs font-bold" title={t.printPlan}>
             <Printer size={20} /> <span className="hidden md:inline">{t.printPlan}</span>
+          </button>
+          <button onClick={handleShare} className="p-2 hover:bg-white rounded-xl border flex items-center gap-2 text-xs font-bold" title={t.sharePlan}>
+            <Share size={20} /> <span className="hidden md:inline">{t.sharePlan}</span>
+          </button>
+          <button onClick={handleDownload} className="p-2 hover:bg-white rounded-xl border flex items-center gap-2 text-xs font-bold" title={t.downloadPlan}>
+            <Download size={20} /> <span className="hidden md:inline">{t.downloadPlan}</span>
           </button>
           <button onClick={handleCopy} className={`p-2 hover:bg-white rounded-xl border flex items-center gap-2 text-xs font-bold transition-all ${isCopied ? 'text-teal border-teal' : ''}`} title={t.copyPlan}>
             {isCopied ? <Check size={20} /> : <Copy size={20} />}
@@ -2892,9 +3081,9 @@ function MyPlanPanel({ savedItems, setSavedItems, surveyData, setSurveyData, pla
         
         if (lines.length > 0) {
           const updatedSteps = [...savedItems.steps];
-          lines.forEach(step => {
-            if (!updatedSteps.includes(step)) {
-              updatedSteps.push(step);
+          lines.forEach(stepText => {
+            if (!updatedSteps.some((s: any) => s.text === stepText)) {
+              updatedSteps.push({ text: stepText, completed: false });
               addedStepsCount++;
             }
           });
